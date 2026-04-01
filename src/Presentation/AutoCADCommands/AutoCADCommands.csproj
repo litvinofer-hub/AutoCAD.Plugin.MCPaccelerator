@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <RootNamespace>MCPAccelerator.Presentation.AutoCADCommands</RootNamespace>
+    <AssemblyName>MCPAccelerator.Presentation.AutoCADCommands</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Infrastructure\AutoCADConverter\AutoCADConverter.csproj" />
+  </ItemGroup>
+
+  <!-- TODO: Add AutoCAD SDK references (accoremgd.dll, acdbmgd.dll, acmgd.dll) -->
+
+</Project>

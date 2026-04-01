@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <RootNamespace>MCPAccelerator.Infrastructure.AutoCADConverter</RootNamespace>
+    <AssemblyName>MCPAccelerator.Infrastructure.AutoCADConverter</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Domain\BuildingModel\BuildingModel.csproj" />
+    <ProjectReference Include="..\..\Utils\GeometryModel\GeometryModel.csproj" />
+  </ItemGroup>
+
+  <!-- TODO: Add AutoCAD SDK references (accoremgd.dll, acdbmgd.dll, acmgd.dll) -->
+
+</Project>

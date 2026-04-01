@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <RootNamespace>MCPAccelerator.Utils.GeometryServices</RootNamespace>
+    <AssemblyName>MCPAccelerator.Utils.GeometryServices</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GeometryModel\GeometryModel.csproj" />
+  </ItemGroup>
+
+</Project>
