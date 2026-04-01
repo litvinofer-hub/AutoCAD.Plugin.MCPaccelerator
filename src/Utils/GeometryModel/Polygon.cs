@@ -29,7 +29,11 @@ namespace MCPAccelerator.Utils.GeometryModel
                 var first = Points[0];
                 var last = Points[Points.Count - 1];
 
-                if (!first.Equals(last))
+                if (first.Equals(last) && !ReferenceEquals(first, last))
+                {
+                    throw new ArgumentException("Last point is equal to the first point but is not the same reference. Use the same Point object to close the polygon.");
+                }
+                else if (!first.Equals(last))
                 {
                     Points.Add(first);
                 }
