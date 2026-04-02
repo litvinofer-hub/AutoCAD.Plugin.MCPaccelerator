@@ -1,11 +1,11 @@
 namespace MCPAccelerator.Utils.GeometryModel
 {
-    public class Line
+    public class LineSegment
     {
         public Point StartPoint { get; set; }
         public Point EndPoint { get; set; }
 
-        public Line(Point startPoint, Point endPoint)
+        public LineSegment(Point startPoint, Point endPoint)
         {
             StartPoint = startPoint;
             EndPoint = endPoint;
@@ -13,7 +13,7 @@ namespace MCPAccelerator.Utils.GeometryModel
 
         public override bool Equals(object obj)
         {
-            if (obj is Line other)
+            if (obj is LineSegment other)
             {
                 bool sameDirection = StartPoint.Equals(other.StartPoint) && EndPoint.Equals(other.EndPoint);
                 bool reversed = StartPoint.Equals(other.EndPoint) && EndPoint.Equals(other.StartPoint);
@@ -31,5 +31,21 @@ namespace MCPAccelerator.Utils.GeometryModel
                 return StartPoint.GetHashCode() + EndPoint.GetHashCode();
             }
         }
+
+        /// <summary>
+        /// Checks if a point lies on this line segment by verifying that
+        /// distance(start, point) + distance(point, end) ≈ distance(start, end).
+        /// Uses 2D distance (X, Y only).
+        /// </summary>
+        public bool IsPointOnSegment2D(Point point)
+        {
+            double dStartToPoint = StartPoint.Distance2D(point);
+            double dPointToEnd = point.Distance2D(EndPoint);
+            double dTotal = StartPoint.Distance2D(EndPoint);
+
+            return GeometrySettings.AreEqual(dStartToPoint + dPointToEnd, dTotal);
+        }
+
+        
     }
 }
