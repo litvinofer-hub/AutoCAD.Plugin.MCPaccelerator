@@ -57,5 +57,83 @@ namespace MCPAccelerator.Tests.GeometryModel
 
             Assert.Equal(line1.GetHashCode(), line2.GetHashCode());
         }
+        [Fact]
+        public void IsPointOnSegment2D_PointOnSegment_ReturnsTrue()
+        {
+            var segment = new LineSegment(new Point(0, 0), new Point(10, 0));
+            var point = new Point(5, 0);
+
+            Assert.True(segment.IsPointOnSegment2D(point));
+        }
+
+        [Fact]
+        public void IsPointOnSegment2D_StartPoint_ReturnsTrue()
+        {
+            var segment = new LineSegment(new Point(0, 0), new Point(10, 0));
+
+            Assert.True(segment.IsPointOnSegment2D(new Point(0, 0)));
+        }
+
+        [Fact]
+        public void IsPointOnSegment2D_EndPoint_ReturnsTrue()
+        {
+            var segment = new LineSegment(new Point(0, 0), new Point(10, 0));
+
+            Assert.True(segment.IsPointOnSegment2D(new Point(10, 0)));
+        }
+
+        [Fact]
+        public void IsPointOnSegment2D_PointOffSegment_ReturnsFalse()
+        {
+            var segment = new LineSegment(new Point(0, 0), new Point(10, 0));
+            var point = new Point(5, 1);
+
+            Assert.False(segment.IsPointOnSegment2D(point));
+        }
+
+        [Fact]
+        public void IsPointOnSegment2D_PointBeyondEnd_ReturnsFalse()
+        {
+            var segment = new LineSegment(new Point(0, 0), new Point(10, 0));
+            var point = new Point(11, 0);
+
+            Assert.False(segment.IsPointOnSegment2D(point));
+        }
+
+        [Fact]
+        public void IsPointOnSegment2D_PointBeforeStart_ReturnsFalse()
+        {
+            var segment = new LineSegment(new Point(0, 0), new Point(10, 0));
+            var point = new Point(-1, 0);
+
+            Assert.False(segment.IsPointOnSegment2D(point));
+        }
+
+        [Fact]
+        public void IsPointOnSegment2D_DiagonalSegment_PointOnIt_ReturnsTrue()
+        {
+            var segment = new LineSegment(new Point(0, 0), new Point(10, 10));
+            var point = new Point(5, 5);
+
+            Assert.True(segment.IsPointOnSegment2D(point));
+        }
+
+        [Fact]
+        public void IsPointOnSegment2D_IgnoresZCoordinate()
+        {
+            var segment = new LineSegment(new Point(0, 0, 0), new Point(10, 0, 0));
+            var point = new Point(5, 0, 99);
+
+            Assert.True(segment.IsPointOnSegment2D(point));
+        }
+
+        [Fact]
+        public void IsPointOnSegment2D_PointWithinTolerance_ReturnsTrue()
+        {
+            var segment = new LineSegment(new Point(0, 0), new Point(10, 0));
+            var point = new Point(5, 1e-7);
+
+            Assert.True(segment.IsPointOnSegment2D(point));
+        }
     }
 }

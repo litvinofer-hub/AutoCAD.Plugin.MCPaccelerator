@@ -20,15 +20,5 @@ namespace MCPAccelerator.Domain.BuildingModel
             Rooms = new List<Room>();
             Walls = new List<Wall>();
         }
-
-        public void AddWall(Wall wall)
-        {
-            Walls.Add(wall);
-        }
-
-        public void RemoveWall(Guid wallId)
-        {
-            Walls.RemoveAll(w => w.Id == wallId);
-        }
     }
 }
