@@ -27,6 +27,16 @@ namespace MCPAccelerator.Utils.GeometryModel
             return false;
         }
 
+        /// <summary>
+        /// Returns the 2D distance (X, Y only) between this point and another point.
+        /// </summary>
+        public double Distance2D(Point other)
+        {
+            double dx = X - other.X;
+            double dy = Y - other.Y;
+            return Math.Sqrt(dx * dx + dy * dy);
+        }
+
         public override int GetHashCode()
         {
             double roundFactor = 1.0 / GeometrySettings.Tolerance;
