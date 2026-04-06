@@ -3,7 +3,7 @@
     "AutoCAD 2027": {
       "commandName": "Executable",
       "executablePath": "C:\\Program Files\\Autodesk\\AutoCAD 2027\\acad.exe",
-      "commandLineArgs": "/nologo /p \"<<Unnamed Profile>>\""
+      "commandLineArgs": "/nologo /p \"<<Unnamed Profile>>\" \"C:\\Users\\Ofer\\Desktop\\Spacial\\models and plans\\samples\\1-AutoDesk-ArchiCAD-Other 2\\AutoCAD\\Vista Dr\\VistaAve.dwg\""
     }
   }
 }
