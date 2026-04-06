@@ -11,11 +11,11 @@ namespace MCPAccelerator.Tests.GeometryModel
         {
             var polyline1 = new Polyline(new List<Point>
             {
-                new Point(0, 0), new Point(1, 1), new Point(2, 2)
+                new Point(0, 0, 0), new Point(1, 1, 0), new Point(2, 2, 0)
             });
             var polyline2 = new Polyline(new List<Point>
             {
-                new Point(0, 0), new Point(1, 1), new Point(2, 2)
+                new Point(0, 0, 0), new Point(1, 1, 0), new Point(2, 2, 0)
             });
 
             Assert.True(polyline1.Equals(polyline2));
@@ -26,11 +26,11 @@ namespace MCPAccelerator.Tests.GeometryModel
         {
             var polyline1 = new Polyline(new List<Point>
             {
-                new Point(0, 0), new Point(1, 1), new Point(2, 2)
+                new Point(0, 0, 0), new Point(1, 1, 0), new Point(2, 2, 0)
             });
             var polyline2 = new Polyline(new List<Point>
             {
-                new Point(2, 2), new Point(1, 1), new Point(0, 0)
+                new Point(2, 2, 0), new Point(1, 1, 0), new Point(0, 0, 0)
             });
 
             Assert.False(polyline1.Equals(polyline2));
@@ -41,11 +41,11 @@ namespace MCPAccelerator.Tests.GeometryModel
         {
             var polyline1 = new Polyline(new List<Point>
             {
-                new Point(0, 0), new Point(1, 1)
+                new Point(0, 0, 0), new Point(1, 1, 0)
             });
             var polyline2 = new Polyline(new List<Point>
             {
-                new Point(0, 0), new Point(1, 1), new Point(2, 2)
+                new Point(0, 0, 0), new Point(1, 1, 0), new Point(2, 2, 0)
             });
 
             Assert.False(polyline1.Equals(polyline2));
@@ -56,7 +56,7 @@ namespace MCPAccelerator.Tests.GeometryModel
         {
             var polyline = new Polyline(new List<Point>
             {
-                new Point(0, 0), new Point(1, 1)
+                new Point(0, 0, 0), new Point(1, 1, 0)
             });
 
             Assert.False(polyline.Equals(null));
@@ -67,14 +67,14 @@ namespace MCPAccelerator.Tests.GeometryModel
         {
             var polyline1 = new Polyline(new List<Point>
             {
-                new Point(0, 0), new Point(1, 1), new Point(2, 2)
+                new Point(0, 0, 0), new Point(1, 1, 0), new Point(2, 2, 0)
             });
             var polyline2 = new Polyline(new List<Point>
             {
-                new Point(0, 0), new Point(1, 1), new Point(2, 2)
+                new Point(0, 0, 0), new Point(1, 1, 0), new Point(2, 2, 0)
             });
 
-            Assert.Equal(polyline1.GetHashCode(), polyline2.GetHashCode());
+            Assert.Equal(polyline1.GetHashCode(), polyline2.GetHashCode()); 
         }
     }
 }

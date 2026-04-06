@@ -8,7 +8,7 @@ namespace MCPAccelerator.Utils.GeometryModel
         public double Y { get; set; }
         public double Z { get; set; }
 
-        public Point(double x, double y, double z = 0)
+        public Point(double x, double y, double z)
         {
             X = x;
             Y = y;

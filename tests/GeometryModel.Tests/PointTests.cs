@@ -6,14 +6,6 @@ namespace MCPAccelerator.Tests.GeometryModel
     public class PointTests
     {
         [Fact]
-        public void Constructor_DefaultZ_IsZero()
-        {
-            var point = new Point(1.0, 2.0);
-
-            Assert.Equal(0.0, point.Z);
-        }
-
-        [Fact]
         public void Equals_SameCoordinates_ReturnsTrue()
         {
             var point1 = new Point(1.0, 2.0, 3.0);

@@ -12,7 +12,7 @@ namespace MCPAccelerator.Tests.GeometryModel
         {
             var polygon = new Polygon(new List<Point>
             {
-                new Point(0, 0), new Point(1, 0), new Point(1, 1)
+                new Point(0, 0, 0), new Point(1, 0, 0), new Point(1, 1, 0)
             });
 
             var first = polygon.Points[0];
@@ -24,10 +24,10 @@ namespace MCPAccelerator.Tests.GeometryModel
         [Fact]
         public void Constructor_AlreadyClosedSameReference_DoesNotAddDuplicate()
         {
-            var firstPoint = new Point(0, 0);
+            var firstPoint = new Point(0, 0, 0);
             var polygon = new Polygon(new List<Point>
             {
-                firstPoint, new Point(1, 0), new Point(1, 1), firstPoint
+                firstPoint, new Point(1, 0, 0), new Point(1, 1, 0), firstPoint
             });
 
             Assert.Equal(4, polygon.Points.Count);
@@ -38,7 +38,7 @@ namespace MCPAccelerator.Tests.GeometryModel
         {
             Assert.Throws<ArgumentException>(() => new Polygon(new List<Point>
             {
-                new Point(0, 0), new Point(1, 0), new Point(1, 1), new Point(0, 0)
+                new Point(0, 0, 0), new Point(1, 0, 0), new Point(1, 1, 0), new Point(0, 0, 0)
             }));
         }
 
@@ -47,7 +47,7 @@ namespace MCPAccelerator.Tests.GeometryModel
         {
             Assert.Throws<ArgumentException>(() => new Polygon(new List<Point>
             {
-                new Point(0, 0), new Point(1, 0)
+                new Point(0, 0, 0), new Point(1, 0, 0)
             }));
         }
 
@@ -56,7 +56,7 @@ namespace MCPAccelerator.Tests.GeometryModel
         {
             Assert.Throws<ArgumentException>(() => new Polygon(new List<Point>
             {
-                new Point(0, 0), new Point(1, 0), new Point(0, 0)
+                new Point(0, 0, 0), new Point(1, 0, 0), new Point(0, 0, 0)
             }));
         }
 
@@ -65,7 +65,7 @@ namespace MCPAccelerator.Tests.GeometryModel
         {
             Assert.Throws<ArgumentException>(() => new Polygon(new List<Point>
             {
-                new Point(0, 0), new Point(1, 0), new Point(0, 1e-7)
+                new Point(0, 0, 0), new Point(1, 0, 0), new Point(0, 1e-7, 0)
             }));
         }
 
@@ -74,7 +74,7 @@ namespace MCPAccelerator.Tests.GeometryModel
         {
             var polygon = new Polygon(new List<Point>
             {
-                new Point(0, 0), new Point(1, 0), new Point(0, 1)
+                new Point(0, 0, 0), new Point(1, 0, 0), new Point(0, 1, 0)
             });
 
             Assert.Equal(4, polygon.Points.Count);
