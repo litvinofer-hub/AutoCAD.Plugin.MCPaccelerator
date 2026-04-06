@@ -1,9 +1,10 @@
 using System;
+using System.Collections.Generic;
 using MCPAccelerator.Utils.GeometryModel;
 
 namespace MCPAccelerator.Domain.BuildingModel
 {
-    public abstract class Opening
+    public abstract class Opening : IHavePoints
     {
         public Guid Id { get; set; }
         public Guid WallId { get; set; }
@@ -25,6 +26,12 @@ namespace MCPAccelerator.Domain.BuildingModel
             WallId = wallId;
             Height = height;
             Line = line;
+        }
+
+        public IEnumerable<Point> GetPoints()
+        {
+            yield return Line.StartPoint;
+            yield return Line.EndPoint;
         }
     }
 }

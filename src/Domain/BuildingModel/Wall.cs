@@ -4,7 +4,7 @@ using MCPAccelerator.Utils.GeometryModel;
 
 namespace MCPAccelerator.Domain.BuildingModel
 {
-    public class Wall
+    public class Wall : IHavePoints
     {
         public Guid Id { get; set; }
         public Guid BuildingId { get; set; }
@@ -46,6 +46,18 @@ namespace MCPAccelerator.Domain.BuildingModel
 
             opening.WallId = Id;
             Openings.Add(opening);
+        }
+
+        public IEnumerable<Point> GetPoints()
+        {
+            yield return LineSegment.StartPoint;
+            yield return LineSegment.EndPoint;
+
+            foreach (var opening in Openings)
+            {
+                foreach (var point in opening.GetPoints())
+                    yield return point;
+            }
         }
 
         private static void ValidateLineZ(LineSegment line, Level botLevel)

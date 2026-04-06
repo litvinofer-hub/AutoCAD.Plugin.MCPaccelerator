@@ -1,10 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using MCPAccelerator.Utils.GeometryModel;
 
 namespace MCPAccelerator.Domain.BuildingModel
 {
-    public class Room
+    public class Room : IHavePoints
     {
         public Guid Id { get; set; }
         public Guid BuildingId { get; set; }
@@ -27,6 +28,19 @@ namespace MCPAccelerator.Domain.BuildingModel
             Polygon = polygon;
             BotLevel = botLevel;
             TopLevel = topLevel;
+        }
+
+        public IEnumerable<Point> GetPoints()
+        {
+            var points = Polygon.Points;
+            int count = points.Count;
+
+            // Skip the closing point (same reference as first)
+            if (count > 1 && ReferenceEquals(points[0], points[count - 1]))
+                count--;
+
+            for (int i = 0; i < count; i++)
+                yield return points[i];
         }
 
         private static void ValidatePolygonZ(Polygon polygon, Level botLevel)

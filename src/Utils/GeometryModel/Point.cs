@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace MCPAccelerator.Utils.GeometryModel
 {
@@ -52,6 +53,25 @@ namespace MCPAccelerator.Utils.GeometryModel
                 hash = hash * 31 + hz;
                 return hash;
             }
+        }
+
+        /// <summary>
+        /// Checks whether the list contains any two distinct points with equal coordinates.
+        /// Uses a HashSet for O(n) performance.
+        /// </summary>
+        public static bool HasDuplicates(List<Point> points)
+        {
+            var seen = new HashSet<Point>();
+
+            foreach (var point in points)
+            {
+                if (!seen.Add(point))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }

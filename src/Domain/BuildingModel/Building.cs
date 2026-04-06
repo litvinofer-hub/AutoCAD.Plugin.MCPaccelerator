@@ -1,10 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using MCPAccelerator.Utils.GeometryModel;
 
 namespace MCPAccelerator.Domain.BuildingModel
 {
-    public class Building
+    public class Building : IHavePoints
     {
         public Guid Id { get; set; }
         public List<Level> Levels { get; set; }
@@ -19,6 +20,21 @@ namespace MCPAccelerator.Domain.BuildingModel
             Stories = new List<Story>();
             Rooms = new List<Room>();
             Walls = new List<Wall>();
+        }
+
+        public IEnumerable<Point> GetPoints()
+        {
+            foreach (var room in Rooms)
+            {
+                foreach (var point in room.GetPoints())
+                    yield return point;
+            }
+
+            foreach (var wall in Walls)
+            {
+                foreach (var point in wall.GetPoints())
+                    yield return point;
+            }
         }
     }
 }

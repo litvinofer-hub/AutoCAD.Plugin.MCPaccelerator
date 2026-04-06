@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using MCPAccelerator.Utils.GeometryModel;
 using Xunit;
 
@@ -82,6 +83,70 @@ namespace MCPAccelerator.Tests.GeometryModel
             var point2 = new Point(1.0 + 1e-5, 2.0, 3.0);
 
             Assert.NotEqual(point1.GetHashCode(), point2.GetHashCode());
+        }
+        [Fact]
+        public void HasDuplicates_EmptyList_ReturnsFalse()
+        {
+            Assert.False(Point.HasDuplicates(new List<Point>()));
+        }
+
+        [Fact]
+        public void HasDuplicates_SinglePoint_ReturnsFalse()
+        {
+            var points = new List<Point> { new Point(1, 2, 3) };
+
+            Assert.False(Point.HasDuplicates(points));
+        }
+
+        [Fact]
+        public void HasDuplicates_AllUnique_ReturnsFalse()
+        {
+            var points = new List<Point>
+            {
+                new Point(0, 0, 0),
+                new Point(1, 0, 0),
+                new Point(0, 1, 0),
+                new Point(0, 0, 1)
+            };
+
+            Assert.False(Point.HasDuplicates(points));
+        }
+
+        [Fact]
+        public void HasDuplicates_WithExactDuplicate_ReturnsTrue()
+        {
+            var points = new List<Point>
+            {
+                new Point(0, 0, 0),
+                new Point(1, 2, 3),
+                new Point(0, 0, 0)
+            };
+
+            Assert.True(Point.HasDuplicates(points));
+        }
+
+        [Fact]
+        public void HasDuplicates_WithinTolerance_ReturnsTrue()
+        {
+            var points = new List<Point>
+            {
+                new Point(1, 2, 3),
+                new Point(1 + 1e-7, 2, 3)
+            };
+
+            Assert.True(Point.HasDuplicates(points));
+        }
+
+        [Fact]
+        public void HasDuplicates_OutsideTolerance_ReturnsFalse()
+        {
+            var points = new List<Point>
+            {
+                new Point(1, 2, 3),
+                new Point(1 + 1e-4, 2, 3)
+            };
+
+            Assert.False(Point.HasDuplicates(points));
         }
     }
 }
