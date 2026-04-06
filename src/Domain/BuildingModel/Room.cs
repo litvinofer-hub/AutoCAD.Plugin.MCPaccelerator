@@ -11,28 +11,33 @@ namespace MCPAccelerator.Domain.BuildingModel
         public Guid BuildingId { get; set; }
 
         /// <summary>
-        /// 2D polygon (X, Y). Z coordinates must equal BotLevel.Elevation.
+        /// 2D polygon at the bottom elevation. Z coordinates match BotLevel.Elevation.
         /// </summary>
-        public Polygon Polygon { get; set; }
-        public Level BotLevel { get; set; }
+        public Polygon BotPolygon { get; set; }
+
+        /// <summary>
+        /// Derived from the polygon's Z coordinate. Returns the Level whose elevation matches.
+        /// </summary>
+        public Level BotLevel { get; private set; }
         public Level TopLevel { get; set; }
 
         public double Height => TopLevel.Elevation - BotLevel.Elevation;
 
-        public Room(Guid buildingId, Polygon polygon, Level botLevel, Level topLevel)
+        public Room(Guid buildingId, Polygon polygon, Level topLevel, IReadOnlyList<Level> buildingLevels)
         {
-            ValidatePolygonZ(polygon, botLevel);
+            double polygonZ = GetAndValidatePolygonZ(polygon);
+            Level botLevel = FindMatchingLevel(polygonZ, buildingLevels);
 
             Id = Guid.NewGuid();
             BuildingId = buildingId;
-            Polygon = polygon;
+            BotPolygon = polygon;
             BotLevel = botLevel;
             TopLevel = topLevel;
         }
 
         public IEnumerable<Point> GetPoints()
         {
-            var points = Polygon.Points;
+            var points = BotPolygon.Points;
             int count = points.Count;
 
             // Skip the closing point (same reference as first)
@@ -43,12 +48,38 @@ namespace MCPAccelerator.Domain.BuildingModel
                 yield return points[i];
         }
 
-        private static void ValidatePolygonZ(Polygon polygon, Level botLevel)
+        /// <summary>
+        /// Validates that all polygon points have the same Z coordinate.
+        /// Returns that common Z value.
+        /// </summary>
+        private static double GetAndValidatePolygonZ(Polygon polygon)
         {
-            if (polygon.Points.Any(p => !GeometrySettings.AreEqual(p.Z, botLevel.Elevation)))
+            double firstZ = polygon.Points[0].Z;
+
+            if (polygon.Points.Any(p => !GeometrySettings.AreEqual(p.Z, firstZ)))
             {
-                throw new ArgumentException("Room polygon Z coordinates must equal BotLevel elevation.");
+                throw new ArgumentException("All polygon Z coordinates must be equal.");
             }
+
+            return firstZ;
+        }
+
+        /// <summary>
+        /// Finds a Level whose elevation matches the given Z value.
+        /// Throws if no matching Level exists.
+        /// </summary>
+        private static Level FindMatchingLevel(double z, IReadOnlyList<Level> levels)
+        {
+            var level = levels.FirstOrDefault(l => GeometrySettings.AreEqual(l.Elevation, z));
+
+            if (level == null)
+            {
+                throw new ArgumentException(
+                    $"No Level found with elevation matching polygon Z ({z}). " +
+                    "Register the Level in the Building before creating the Room.");
+            }
+
+            return level;
         }
     }
 }

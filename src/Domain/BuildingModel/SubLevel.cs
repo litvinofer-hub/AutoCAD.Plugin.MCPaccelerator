@@ -1,4 +1,5 @@
 using System;
+using MCPAccelerator.Utils.GeometryModel;
 
 namespace MCPAccelerator.Domain.BuildingModel
 {
@@ -16,6 +17,22 @@ namespace MCPAccelerator.Domain.BuildingModel
             Id = Guid.NewGuid();
             LevelId = levelId;
             Offset = offset;
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (obj is SubLevel other)
+            {
+                return GeometrySettings.AreEqual(Offset, other.Offset);
+            }
+
+            return false;
+        }
+
+        public override int GetHashCode()
+        {
+            double roundFactor = 1.0 / GeometrySettings.Tolerance;
+            return Math.Round(Offset * roundFactor).GetHashCode();
         }
     }
 }

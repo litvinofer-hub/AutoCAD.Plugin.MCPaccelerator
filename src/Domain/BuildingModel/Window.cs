@@ -5,7 +5,7 @@ namespace MCPAccelerator.Domain.BuildingModel
 {
     public class Window : Opening
     {
-        public Window(Guid wallId, double height, LineSegment line)
+        internal Window(Guid wallId, double height, LineSegment line)
             : base(wallId, height, line)
         {
         }

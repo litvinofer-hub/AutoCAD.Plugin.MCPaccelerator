@@ -59,7 +59,7 @@ namespace MCPAccelerator.Utils.GeometryModel
         /// Checks whether the list contains any two distinct points with equal coordinates.
         /// Uses a HashSet for O(n) performance.
         /// </summary>
-        public static bool HasDuplicates(List<Point> points)
+        public static bool HasDuplicates(IEnumerable<Point> points)
         {
             var seen = new HashSet<Point>();
 

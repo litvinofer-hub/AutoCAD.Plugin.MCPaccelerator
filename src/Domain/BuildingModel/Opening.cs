@@ -7,20 +7,20 @@ namespace MCPAccelerator.Domain.BuildingModel
     public abstract class Opening : IHavePoints
     {
         public Guid Id { get; set; }
-        public Guid WallId { get; set; }
+        public Guid WallId { get; private set; }
 
         /// <summary>
         /// Height from the bottom of the opening to the top of the opening.
         /// </summary>
-        public double Height { get; set; }
+        public double Height { get; private set; }
 
         /// <summary>
         /// Line in global coordinates. Must lie on the parent wall's line (2D).
         /// Z coordinates define the bottom elevation of the opening.
         /// </summary>
-        public LineSegment Line { get; set; }
+        public LineSegment Line { get; private set; }
 
-        protected Opening(Guid wallId, double height, LineSegment line)
+        internal Opening(Guid wallId, double height, LineSegment line)
         {
             Id = Guid.NewGuid();
             WallId = wallId;

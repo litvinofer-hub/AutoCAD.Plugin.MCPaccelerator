@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using MCPAccelerator.Utils.GeometryModel;
 
 namespace MCPAccelerator.Domain.BuildingModel
@@ -10,98 +11,160 @@ namespace MCPAccelerator.Domain.BuildingModel
         public Guid BuildingId { get; set; }
 
         /// <summary>
-        /// 2D line (X, Y). Z coordinates must equal BotLevel.Elevation.
+        /// 2D line at the bottom elevation. Z coordinates match BotLevel.Elevation.
         /// </summary>
-        public LineSegment LineSegment { get; set; }
+        public LineSegment BotLine { get; set; }
         public double Thickness { get; set; }
-        public Level BotLevel { get; set; }
+
+        /// <summary>
+        /// Derived from BotLine's Z coordinate. Returns the Level whose elevation matches.
+        /// </summary>
+        public Level BotLevel { get; private set; }
         public Level TopLevel { get; set; }
-        public List<Opening> Openings { get; set; }
+
+        private readonly List<Opening> _openings;
+        public IReadOnlyList<Opening> Openings => _openings.AsReadOnly();
 
         public double Height => TopLevel.Elevation - BotLevel.Elevation;
 
-        public Wall(Guid buildingId, LineSegment line, double thickness, Level botLevel, Level topLevel)
+        public Wall(Guid buildingId, LineSegment botLine, double thickness, Level topLevel, IReadOnlyList<Level> buildingLevels)
         {
-            ValidateLineZ(line, botLevel);
+            double lineZ = GetAndValidateLineZ(botLine);
+            Level botLevel = FindMatchingLevel(lineZ, buildingLevels);
 
             Id = Guid.NewGuid();
             BuildingId = buildingId;
-            LineSegment = line;
+            BotLine = botLine;
             Thickness = thickness;
             BotLevel = botLevel;
             TopLevel = topLevel;
-            Openings = new List<Opening>();
+            _openings = new List<Opening>();
         }
 
-        /// <summary>
-        /// Adds an opening to the wall. Validates that the opening line is within
-        /// the wall line, the opening line Z matches the wall's BotLevel,
-        /// and the opening (SillHeight + Height) does not exceed the wall height.
-        /// </summary>
-        public void AddOpening(Opening opening)
+        public Door AddDoor(Building building, double x1, double y1, double x2, double y2,
+            double z, double height)
         {
-            ValidateOpeningLineZ(opening);
-            ValidateOpeningWithinWallLine(opening);
-            ValidateOpeningHeight(opening);
+            var line = CreateOpeningLine(building, x1, y1, x2, y2, z);
+            var door = new Door(this.Id, height, line);
+            ValidateAndAddOpening(door);
+            return door;
+        }
 
-            opening.WallId = Id;
-            Openings.Add(opening);
+        public Window AddWindow(Building building, double x1, double y1, double x2, double y2,
+            double z, double height)
+        {
+            var line = CreateOpeningLine(building, x1, y1, x2, y2, z);
+            var window = new Window(this.Id, height, line);
+            ValidateAndAddOpening(window);
+            return window;
+        }
+
+        public Void AddVoid(Building building, double x1, double y1, double x2, double y2,
+            double z, double height)
+        {
+            var line = CreateOpeningLine(building, x1, y1, x2, y2, z);
+            var v = new Void(this.Id, height, line);
+            ValidateAndAddOpening(v);
+            return v;
+        }
+
+        public bool RemoveOpening(Opening opening)
+        {
+            return _openings.Remove(opening);
         }
 
         public IEnumerable<Point> GetPoints()
         {
-            yield return LineSegment.StartPoint;
-            yield return LineSegment.EndPoint;
+            yield return BotLine.StartPoint;
+            yield return BotLine.EndPoint;
 
-            foreach (var opening in Openings)
+            foreach (var opening in _openings)
             {
                 foreach (var point in opening.GetPoints())
                     yield return point;
             }
         }
 
-        private static void ValidateLineZ(LineSegment line, Level botLevel)
+        private LineSegment CreateOpeningLine(Building building, double x1, double y1, double x2, double y2, double z)
         {
-            if (!GeometrySettings.AreEqual(line.StartPoint.Z, botLevel.Elevation) ||
-                !GeometrySettings.AreEqual(line.EndPoint.Z, botLevel.Elevation))
+            Point start = building.GetOrAddPoint(x1, y1, z);
+            Point end = building.GetOrAddPoint(x2, y2, z);
+            return new LineSegment(start, end);
+        }
+
+        private void ValidateAndAddOpening(Opening opening)
+        {
+            ValidateOpeningLineXY(opening);
+            ValidateOpeningLineZ(opening);
+            ValidateOpeningHeight(opening);
+            _openings.Add(opening);
+        }
+
+        /// <summary>
+        /// Validates that both endpoints of the line have the same Z coordinate.
+        /// Returns that common Z value.
+        /// </summary>
+        private static double GetAndValidateLineZ(LineSegment line)
+        {
+            if (!GeometrySettings.AreEqual(line.StartPoint.Z, line.EndPoint.Z))
             {
-                throw new ArgumentException("Wall line Z coordinates must equal BotLevel elevation.");
+                throw new ArgumentException("Wall line Z coordinates must be equal.");
+            }
+
+            return line.StartPoint.Z;
+        }
+
+        private static Level FindMatchingLevel(double z, IReadOnlyList<Level> levels)
+        {
+            var level = levels.FirstOrDefault(l => GeometrySettings.AreEqual(l.Elevation, z));
+
+            if (level == null)
+            {
+                throw new ArgumentException(
+                    $"No Level found with elevation matching wall line Z ({z}). " +
+                    "Register the Level in the Building before creating the Wall.");
+            }
+
+            return level;
+        }
+
+        private void ValidateOpeningLineXY(Opening opening)
+        {
+            if (!BotLine.IsPointOnSegment2D(opening.Line.StartPoint) ||
+                !BotLine.IsPointOnSegment2D(opening.Line.EndPoint))
+            {
+                throw new ArgumentException("Opening line (X,Y) must be within the wall line.");
             }
         }
 
         private void ValidateOpeningLineZ(Opening opening)
         {
             double openingZ = opening.Line.StartPoint.Z;
+            double botZ = BotLevel.Elevation;
+            double topZ = TopLevel.Elevation;
 
             if (!GeometrySettings.AreEqual(opening.Line.StartPoint.Z, opening.Line.EndPoint.Z))
             {
                 throw new ArgumentException("Opening line Z coordinates must be equal (opening must be horizontal).");
             }
 
-            if (GeometrySettings.IsLessThan(openingZ, BotLevel.Elevation))
+            if (GeometrySettings.IsLessThan(openingZ, botZ) || GeometrySettings.IsGreaterThan(openingZ, topZ))
             {
-                throw new ArgumentException("Opening bottom cannot be below the wall's BotLevel elevation.");
-            }
-        }
-
-        private void ValidateOpeningWithinWallLine(Opening opening)
-        {
-            if (!LineSegment.IsPointOnSegment2D(opening.Line.StartPoint) ||
-                !LineSegment.IsPointOnSegment2D(opening.Line.EndPoint))
-            {
-                throw new ArgumentException("Opening line must be within the wall line.");
+                throw new ArgumentException(
+                    $"Opening Z ({openingZ}) must be between wall bot ({botZ}) and top ({topZ}) elevation.");
             }
         }
 
         private void ValidateOpeningHeight(Opening opening)
         {
             double openingTopElevation = opening.Line.StartPoint.Z + opening.Height;
-            double wallTopElevation = TopLevel.Elevation;
+            double botZ = BotLevel.Elevation;
+            double topZ = TopLevel.Elevation;
 
-            if (GeometrySettings.IsGreaterThan(openingTopElevation, wallTopElevation))
+            if (GeometrySettings.IsLessThan(openingTopElevation, botZ) || GeometrySettings.IsGreaterThan(openingTopElevation, topZ))
             {
                 throw new ArgumentException(
-                    $"Opening top elevation ({openingTopElevation}) exceeds wall top elevation ({wallTopElevation}).");
+                    $"Opening top elevation ({openingTopElevation}) must be between wall bot ({botZ}) and top ({topZ}) elevation.");
             }
         }
     }
