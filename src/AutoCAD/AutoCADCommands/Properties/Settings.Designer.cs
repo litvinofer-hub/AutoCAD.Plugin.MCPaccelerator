@@ -8,7 +8,7 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
-namespace MCPAccelerator.Presentation.AutoCADCommands.Properties {
+namespace MCPAccelerator.AutoCAD.AutoCADCommands.Properties {
     
     
     [global::System.Runtime.CompilerServices.CompilerGeneratedAttribute()]

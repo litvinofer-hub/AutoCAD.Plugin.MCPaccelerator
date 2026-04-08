@@ -2,12 +2,13 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <RootNamespace>MCPAccelerator.Presentation.AutoCADCommands</RootNamespace>
-    <AssemblyName>MCPAccelerator.Presentation.AutoCADCommands</AssemblyName>
+    <RootNamespace>MCPAccelerator.AutoCAD.AutoCADCommands</RootNamespace>
+    <AssemblyName>MCPAccelerator.AutoCAD.AutoCADCommands</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Infrastructure\AutoCADConverter\AutoCADConverter.csproj" />
+    <ProjectReference Include="..\..\Domain\BuildingModel\BuildingModel.csproj" />
+    <ProjectReference Include="..\..\Utils\GeometryModel\GeometryModel.csproj" />
   </ItemGroup>
 
   <ItemGroup>
