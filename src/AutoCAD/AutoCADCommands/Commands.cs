@@ -1,8 +1,7 @@
-﻿using Autodesk.AutoCAD.ApplicationServices;
+using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
-using MCPAccelerator.AutoCAD.AutoCADCommands.Converter;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -15,77 +14,57 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands
 {
     public class Commands
     {
-        [CommandMethod("OL_GET_WALLS")]
-        public static void GetWalls()
+        [CommandMethod("OL_SELECT_WALLS")]
+        public static void SelectWalls()
         {
-            var polylines = GetClosedPolylinesFromLayers("wall");
-            PrintPolylines(polylines, "wall");
+            var polylines = SelectClosedPolylinesFromLayers("wall");
+            if (polylines != null)
+                PrintPolylines(polylines, "Wall");
         }
 
-        [CommandMethod("OL_GET_WINDOWS")]
-        public static void GetWindows()
+        [CommandMethod("OL_SELECT_WINDOWS")]
+        public static void SelectWindows()
         {
-            var polylines = GetClosedPolylinesFromLayers("window");
-            PrintPolylines(polylines, "window");
+            var polylines = SelectClosedPolylinesFromLayers("window");
+            if (polylines != null)
+                PrintPolylines(polylines, "Window");
         }
 
-        [CommandMethod("OL_GET_DOORS")]
-        public static void GetDoors()
+        [CommandMethod("OL_SELECT_DOORS")]
+        public static void SelectDoors()
         {
-            var polylines = GetClosedPolylinesFromLayers("door");
-            PrintPolylines(polylines, "door");
-        }
-
-        [CommandMethod("OL_BUILD")]
-        public static void Build()
-        {
-            var editor = Application.DocumentManager.MdiActiveDocument.Editor;
-
-            var wallPolylines = GetClosedPolylinesFromLayers("wall");
-            var windowPolylines = GetClosedPolylinesFromLayers("window");
-            var doorPolylines = GetClosedPolylinesFromLayers("door");
-
-            var converter = new BuildingConverter();
-            var building = converter.Convert(wallPolylines, windowPolylines, doorPolylines,
-                botElevation: 0, topElevation: 3.0);
-
-            editor.WriteMessage($"\nBuilding created:");
-            editor.WriteMessage($"\n  Walls:   {building.Walls.Count}");
-            editor.WriteMessage($"\n  Levels:  {building.Levels.Count}");
-
-            int totalWindows = 0;
-            int totalDoors = 0;
-            foreach (var wall in building.Walls)
-            {
-                foreach (var opening in wall.Openings)
-                {
-                    if (opening is Domain.BuildingModel.Window) totalWindows++;
-                    if (opening is Domain.BuildingModel.Door) totalDoors++;
-                }
-            }
-
-            editor.WriteMessage($"\n  Windows: {totalWindows}");
-            editor.WriteMessage($"\n  Doors:   {totalDoors}");
-            editor.WriteMessage($"\n  Points:  {building.GetPoints().Count()}");
+            var polylines = SelectClosedPolylinesFromLayers("door");
+            if (polylines != null)
+                PrintPolylines(polylines, "Door");
         }
 
         /// <summary>
-        /// akes a keyword string (e.g. "wall"), opens the current drawing's Model Space in a read transaction, 
-        /// iterates all entities, and returns only Polyline objects that are both closed and whose layer name 
-        /// contains the keyword (case-insensitive)
+        /// Prompts the user to select elements from a single floor plan,
+        /// then filters for closed polylines whose layer contains the keyword (case-insensitive).
         /// </summary>
-        private static List<Polyline> GetClosedPolylinesFromLayers(string layerKeyword)
+        private static List<Polyline> SelectClosedPolylinesFromLayers(string layerKeyword)
         {
-            var result = new List<Polyline>();
             var document = Application.DocumentManager.MdiActiveDocument;
-            var database = document.Database;
+            var editor = document.Editor;
 
-            using (var transaction = database.TransactionManager.StartTransaction())
+            var options = new PromptSelectionOptions
             {
-                var blockTable = (BlockTable)transaction.GetObject(database.BlockTableId, OpenMode.ForRead);
-                var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForRead);
+                MessageForAdding = $"\nSelect floor plan elements to find {layerKeyword}s, then press Enter: "
+            };
 
-                foreach (ObjectId objectId in modelSpace)
+            var selectionResult = editor.GetSelection(options);
+
+            if (selectionResult.Status != PromptStatus.OK)
+            {
+                editor.WriteMessage("\nSelection cancelled.");
+                return null;
+            }
+
+            var result = new List<Polyline>();
+
+            using (var transaction = document.Database.TransactionManager.StartTransaction())
+            {
+                foreach (ObjectId objectId in selectionResult.Value.GetObjectIds())
                 {
                     var entity = transaction.GetObject(objectId, OpenMode.ForRead) as Polyline;
                     if (entity == null)
@@ -106,11 +85,11 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands
             return result;
         }
 
-        private static void PrintPolylines(List<Polyline> polylines, string keyword)
+        private static void PrintPolylines(List<Polyline> polylines, string elementType)
         {
             var editor = Application.DocumentManager.MdiActiveDocument.Editor;
 
-            editor.WriteMessage($"\nFound {polylines.Count} closed polyline(s) on '{keyword}' layers:\n");
+            editor.WriteMessage($"\n{polylines.Count} {elementType}(s) found:\n");
 
             for (int i = 0; i < polylines.Count; i++)
             {
