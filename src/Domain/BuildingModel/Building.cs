@@ -5,25 +5,21 @@ using MCPAccelerator.Utils.GeometryModel;
 
 namespace MCPAccelerator.Domain.BuildingModel
 {
-    public class Building : IHavePoints
+    public class Building(string name = "") : IHavePoints
     {
-        public Guid Id { get; set; }
+        public Guid Id { get; private set; } = Guid.NewGuid();
+        public string Name { get; private set; } = name;
 
-        private readonly Dictionary<Point, Point> _uniquePoints = new Dictionary<Point, Point>();
-        private readonly List<Level> _levels = new List<Level>();
-        private readonly List<Story> _stories = new List<Story>();
-        private readonly List<Room> _rooms = new List<Room>();
-        private readonly List<Wall> _walls = new List<Wall>();
+        private readonly Dictionary<Point, Point> _uniquePoints = [];
+        private readonly List<Level> _levels = [];
+        private readonly List<Story> _stories = [];
+        private readonly List<Room> _rooms = [];
+        private readonly List<Wall> _walls = [];
 
         public IReadOnlyList<Level> Levels => _levels.AsReadOnly();
         public IReadOnlyList<Story> Stories => _stories.AsReadOnly();
         public IReadOnlyList<Room> Rooms => _rooms.AsReadOnly();
         public IReadOnlyList<Wall> Walls => _walls.AsReadOnly();
-
-        public Building()
-        {
-            Id = Guid.NewGuid();
-        }
 
         // --- Shared instance management ---
 
@@ -89,12 +85,21 @@ namespace MCPAccelerator.Domain.BuildingModel
             return wall;
         }
 
-        public Story AddStory(double botElevation, double topElevation)
+        public Story AddStory(double botElevation, double topElevation, string name = "",
+            IEnumerable<double> intermediateElevations = null)
         {
             Level bot = GetOrAddLevel(botElevation);
             Level top = GetOrAddLevel(topElevation);
 
-            var story = new Story(this.Id, bot, top);
+            var story = new Story(this.Id, bot, top, name);
+            if (intermediateElevations != null)
+            {
+                foreach (var elevation in intermediateElevations)
+                {
+                    var level = GetOrAddLevel(elevation);
+                    story.AddIntermediateLevel(level);
+                }
+            }
             _stories.Add(story);
             return story;
         }
@@ -103,26 +108,32 @@ namespace MCPAccelerator.Domain.BuildingModel
 
         public bool RemoveRoom(Room room)
         {
-            return _rooms.Remove(room);
+            bool removed = _rooms.Remove(room);
+            if (removed) Cleanup();
+            return removed;
         }
 
         public bool RemoveWall(Wall wall)
         {
-            return _walls.Remove(wall);
+            bool removed = _walls.Remove(wall);
+            if (removed) Cleanup();
+            return removed;
         }
 
         public bool RemoveStory(Story story)
         {
-            return _stories.Remove(story);
+            bool removed = _stories.Remove(story);
+            if (removed) Cleanup();
+            return removed;
         }
 
         // --- Cleanup ---
 
         /// <summary>
         /// Removes points and levels that are no longer referenced by any element.
-        /// Call after removing rooms, walls, or stories.
+        /// Called automatically after removing rooms, walls, or stories.
         /// </summary>
-        public void Cleanup()
+        private void Cleanup()
         {
             // Rebuild unique points from current usage
             _uniquePoints.Clear();

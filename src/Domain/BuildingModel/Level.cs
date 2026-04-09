@@ -5,25 +5,17 @@ using MCPAccelerator.Utils.GeometryModel;
 
 namespace MCPAccelerator.Domain.BuildingModel
 {
-    public class Level
+    public class Level(Guid buildingId, double elevation)
     {
-        public Guid Id { get; set; }
-        public Guid BuildingId { get; set; }
+        public Guid Id { get; private set; } = Guid.NewGuid();
+        public Guid BuildingId { get; private set; } = buildingId;
         /// <summary>
         /// Global Z coordinate of the level.
         /// </summary>
-        public double Elevation { get; set; }
+        public double Elevation { get; private set; } = elevation;
 
-        private readonly List<SubLevel> _subLevels;
+        private readonly List<SubLevel> _subLevels = [];
         public IReadOnlyList<SubLevel> SubLevels => _subLevels.AsReadOnly();
-
-        public Level(Guid buildingId, double elevation)
-        {
-            Id = Guid.NewGuid();
-            BuildingId = buildingId;
-            Elevation = elevation;
-            _subLevels = new List<SubLevel>();
-        }
 
         /// <summary>
         /// Returns the existing SubLevel with matching offset, or creates and adds a new one.

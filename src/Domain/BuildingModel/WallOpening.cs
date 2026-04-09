@@ -4,9 +4,9 @@ using MCPAccelerator.Utils.GeometryModel;
 
 namespace MCPAccelerator.Domain.BuildingModel
 {
-    public abstract class Opening : IHavePoints
+    public abstract class WallOpening : IHavePoints
     {
-        public Guid Id { get; set; }
+        public Guid Id { get; private set; }
         public Guid WallId { get; private set; }
 
         /// <summary>
@@ -20,7 +20,7 @@ namespace MCPAccelerator.Domain.BuildingModel
         /// </summary>
         public LineSegment Line { get; private set; }
 
-        internal Opening(Guid wallId, double height, LineSegment line)
+        internal WallOpening(Guid wallId, double height, LineSegment line)
         {
             Id = Guid.NewGuid();
             WallId = wallId;

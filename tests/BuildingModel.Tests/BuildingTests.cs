@@ -276,10 +276,10 @@ namespace MCPAccelerator.Tests.BuildingModel
             Assert.Empty(building.Stories);
         }
 
-        // --- Cleanup ---
+        // --- Remove cleans up unused levels and points ---
 
         [Fact]
-        public void Cleanup_RemovesUnusedLevels()
+        public void RemoveWall_CleansUpUnusedLevels()
         {
             var building = new Building();
             building.AddWall(0, 0, 5, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
@@ -288,39 +288,36 @@ namespace MCPAccelerator.Tests.BuildingModel
             Assert.Equal(4, building.Levels.Count);
 
             building.RemoveWall(wall2);
-            building.Cleanup();
 
             // Only elevations 0 and 3 remain (from wall1)
             Assert.Equal(2, building.Levels.Count);
         }
 
         [Fact]
-        public void Cleanup_KeepsSharedLevels()
+        public void RemoveWall_KeepsSharedLevels()
         {
             var building = new Building();
             var wall = building.AddWall(0, 0, 5, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
-            var room = building.AddRoom(
+            building.AddRoom(
                 new[] { (10.0, 0.0), (15.0, 0.0), (15.0, 5.0) },
                 botElevation: 0, topElevation: 3.0);
 
             building.RemoveWall(wall);
-            building.Cleanup();
 
             // Levels 0 and 3 still used by room
             Assert.Equal(2, building.Levels.Count);
         }
 
         [Fact]
-        public void Cleanup_RemovesUnusedPoints()
+        public void RemoveWall_CleansUpUnusedPoints()
         {
             var building = new Building();
             var wall = building.AddWall(0, 0, 5, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
             building.AddWall(10, 0, 15, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
 
             building.RemoveWall(wall);
-            building.Cleanup();
 
-            // After cleanup, only wall2's points remain
+            // After removal, only wall2's points remain
             // Verify via GetOrAddPoint: wall1's points should no longer be cached
             var freshPoint = building.GetOrAddPoint(0, 0, 0);
             var wall2Start = building.Walls[0].BotLine.StartPoint;
@@ -329,7 +326,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         }
 
         [Fact]
-        public void Cleanup_AfterRemoveAll_ClearsEverything()
+        public void RemoveAll_ClearsEverything()
         {
             var building = new Building();
             var wall = building.AddWall(0, 0, 5, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
@@ -339,7 +336,6 @@ namespace MCPAccelerator.Tests.BuildingModel
 
             building.RemoveWall(wall);
             building.RemoveRoom(room);
-            building.Cleanup();
 
             Assert.Empty(building.Levels);
             Assert.Empty(building.GetPoints());

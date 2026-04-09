@@ -7,19 +7,19 @@ namespace MCPAccelerator.Domain.BuildingModel
 {
     public class Room : IHavePoints
     {
-        public Guid Id { get; set; }
-        public Guid BuildingId { get; set; }
+        public Guid Id { get; private set; }
+        public Guid BuildingId { get; private set; }
 
         /// <summary>
         /// 2D polygon at the bottom elevation. Z coordinates match BotLevel.Elevation.
         /// </summary>
-        public Polygon BotPolygon { get; set; }
+        public Polygon BotPolygon { get; private set; }
 
         /// <summary>
         /// Derived from the polygon's Z coordinate. Returns the Level whose elevation matches.
         /// </summary>
         public Level BotLevel { get; private set; }
-        public Level TopLevel { get; set; }
+        public Level TopLevel { get; private set; }
 
         public double Height => TopLevel.Elevation - BotLevel.Elevation;
 

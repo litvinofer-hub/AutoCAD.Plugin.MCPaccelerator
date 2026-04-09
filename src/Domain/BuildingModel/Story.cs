@@ -5,21 +5,22 @@ using MCPAccelerator.Utils.GeometryModel;
 
 namespace MCPAccelerator.Domain.BuildingModel
 {
-    public class Story
+    public class Story(Guid buildingId, Level botLevel, Level topLevel, string name = "")
     {
-        public Guid Id { get; set; }
-        public Guid BuildingId { get; set; }
-        public Level BotLevel { get; set; }
-        public Level TopLevel { get; set; }
+        public Guid Id { get; private set; } = Guid.NewGuid();
+        public Guid BuildingId { get; private set; } = buildingId;
+        public string Name { get; private set; } = name;
+        public Level BotLevel { get; private set; } = botLevel;
+        public Level TopLevel { get; private set; } = topLevel;
 
         /// <summary>
         /// Intermediate levels between BotLevel and TopLevel, sorted by elevation.
         /// </summary>
         public List<Level> IntermediateLevels
         {
-            get { return _intermediateLevels.OrderBy(l => l.Elevation).ToList(); }
+            get { return [.. _intermediateLevels.OrderBy(l => l.Elevation)]; }
         }
-        private readonly List<Level> _intermediateLevels;
+        private readonly List<Level> _intermediateLevels = new List<Level>();
 
         public double Height => TopLevel.Elevation - BotLevel.Elevation;
 
@@ -35,15 +36,6 @@ namespace MCPAccelerator.Domain.BuildingModel
                 levels.Add(TopLevel);
                 return levels;
             }
-        }
-
-        public Story(Guid buildingId, Level botLevel, Level topLevel)
-        {
-            Id = Guid.NewGuid();
-            BuildingId = buildingId;
-            BotLevel = botLevel;
-            TopLevel = topLevel;
-            _intermediateLevels = new List<Level>();
         }
 
         /// <summary>

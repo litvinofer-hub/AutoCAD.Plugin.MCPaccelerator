@@ -7,23 +7,23 @@ namespace MCPAccelerator.Domain.BuildingModel
 {
     public class Wall : IHavePoints
     {
-        public Guid Id { get; set; }
-        public Guid BuildingId { get; set; }
+        public Guid Id { get; private set; }
+        public Guid BuildingId { get; private set; }
 
         /// <summary>
         /// 2D line at the bottom elevation. Z coordinates match BotLevel.Elevation.
         /// </summary>
-        public LineSegment BotLine { get; set; }
-        public double Thickness { get; set; }
+        public LineSegment BotLine { get; private set; }
+        public double Thickness { get; private set; }
 
         /// <summary>
         /// Derived from BotLine's Z coordinate. Returns the Level whose elevation matches.
         /// </summary>
         public Level BotLevel { get; private set; }
-        public Level TopLevel { get; set; }
+        public Level TopLevel { get; private set; }
 
-        private readonly List<Opening> _openings;
-        public IReadOnlyList<Opening> Openings => _openings.AsReadOnly();
+        private readonly List<WallOpening> _openings;
+        public IReadOnlyList<WallOpening> Openings => _openings.AsReadOnly();
 
         public double Height => TopLevel.Elevation - BotLevel.Elevation;
 
@@ -38,7 +38,7 @@ namespace MCPAccelerator.Domain.BuildingModel
             Thickness = thickness;
             BotLevel = botLevel;
             TopLevel = topLevel;
-            _openings = new List<Opening>();
+            _openings = new List<WallOpening>();
         }
 
         public Door AddDoor(Building building, double x1, double y1, double x2, double y2,
@@ -68,7 +68,7 @@ namespace MCPAccelerator.Domain.BuildingModel
             return v;
         }
 
-        public bool RemoveOpening(Opening opening)
+        public bool RemoveOpening(WallOpening opening)
         {
             return _openings.Remove(opening);
         }
@@ -92,7 +92,7 @@ namespace MCPAccelerator.Domain.BuildingModel
             return new LineSegment(start, end);
         }
 
-        private void ValidateAndAddOpening(Opening opening)
+        private void ValidateAndAddOpening(WallOpening opening)
         {
             ValidateOpeningLineXY(opening);
             ValidateOpeningLineZ(opening);
@@ -128,7 +128,7 @@ namespace MCPAccelerator.Domain.BuildingModel
             return level;
         }
 
-        private void ValidateOpeningLineXY(Opening opening)
+        private void ValidateOpeningLineXY(WallOpening opening)
         {
             if (!BotLine.IsPointOnSegment2D(opening.Line.StartPoint) ||
                 !BotLine.IsPointOnSegment2D(opening.Line.EndPoint))
@@ -137,7 +137,7 @@ namespace MCPAccelerator.Domain.BuildingModel
             }
         }
 
-        private void ValidateOpeningLineZ(Opening opening)
+        private void ValidateOpeningLineZ(WallOpening opening)
         {
             double openingZ = opening.Line.StartPoint.Z;
             double botZ = BotLevel.Elevation;
@@ -155,7 +155,7 @@ namespace MCPAccelerator.Domain.BuildingModel
             }
         }
 
-        private void ValidateOpeningHeight(Opening opening)
+        private void ValidateOpeningHeight(WallOpening opening)
         {
             double openingTopElevation = opening.Line.StartPoint.Z + opening.Height;
             double botZ = BotLevel.Elevation;

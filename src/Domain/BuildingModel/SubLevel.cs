@@ -3,21 +3,14 @@ using MCPAccelerator.Utils.GeometryModel;
 
 namespace MCPAccelerator.Domain.BuildingModel
 {
-    public class SubLevel
+    public class SubLevel(Guid levelId, double offset)
     {
-        public Guid Id { get; set; }
-        public Guid LevelId { get; set; }
+        public Guid Id { get; private set; } = Guid.NewGuid();
+        public Guid LevelId { get; private set; } = levelId;
         /// <summary>
         /// Offset relative to the parent Level's Elevation.
         /// </summary>
-        public double Offset { get; set; }
-
-        public SubLevel(Guid levelId, double offset)
-        {
-            Id = Guid.NewGuid();
-            LevelId = levelId;
-            Offset = offset;
-        }
+        public double Offset { get; private set; } = offset;
 
         public override bool Equals(object obj)
         {
