@@ -11,7 +11,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GeometryServices", "src\Uti
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BuildingModel", "src\Domain\BuildingModel\BuildingModel.csproj", "{A1B2C3D4-0001-0001-0001-000000000003}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AutoCADCommands", "src\AutoCAD\AutoCADCommands\AutoCADCommands.csproj", "{A1B2C3D4-0001-0001-0001-000000000005}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AutoCADPlugin", "src\AutoCAD\AutoCADPlugin\AutoCADPlugin.csproj", "{A1B2C3D4-0001-0001-0001-000000000005}"
 EndProject
 
 # Test Projects
