@@ -5,17 +5,17 @@ using MCPAccelerator.Utils.GeometryModel;
 namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter.ChainBuilding
 {
     /// <summary>
-    /// Builds wall/opening chains from a flat list of tagged floor-plan polylines.
+    /// Builds wall/opening chains from a flat list of tagged floor-plan rectangles.
     ///
     /// Held as an instance so that the "used" sets and the element lists become
     /// private fields instead of being threaded through every helper method.
     /// Construct one builder per floor plan conversion, then call
     /// <see cref="BuildAll"/> to get the chains.
     /// </summary>
-    public class ChainBuilder(List<TaggedPolyline> walls, List<TaggedPolyline> openings, double lengthEpsilon)
+    public class ChainBuilder(List<TaggedRect> walls, List<TaggedRect> openings, double lengthEpsilon)
     {
-        private readonly List<TaggedPolyline> _walls = walls;
-        private readonly List<TaggedPolyline> _openings = openings;
+        private readonly List<TaggedRect> _walls = walls;
+        private readonly List<TaggedRect> _openings = openings;
         private readonly double _lengthEpsilon = lengthEpsilon;
         private readonly HashSet<int> _usedWalls = [];
         private readonly HashSet<int> _usedOpenings = [];
@@ -46,10 +46,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter.ChainBuilding
         private Chain BuildFromOpening(int startOpeningIdx)
         {
             var startOpening = _openings[startOpeningIdx];
-            var dirNullable = startOpening.Polyline.LongAxisDirection2D();
-            if (dirNullable == null) return null;
-
-            var dir = dirNullable.Value;
+            var dir = startOpening.Rect.Direction2D;
 
             var chainElements = new List<ChainEntry>
             {
@@ -64,8 +61,8 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter.ChainBuilding
             // Sort chain elements along the direction so they appear in spatial order
             chainElements.Sort((a, b) =>
             {
-                double tA = a.Element.Polyline.ProjectCenter2D(dir);
-                double tB = b.Element.Polyline.ProjectCenter2D(dir);
+                double tA = a.Element.Rect.ProjectCenter2D(dir);
+                double tB = b.Element.Rect.ProjectCenter2D(dir);
                 return tA.CompareTo(tB);
             });
 
@@ -85,7 +82,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter.ChainBuilding
             {
                 if (expectWall)
                 {
-                    int wallIdx = Adjacency.FindAdjacent(current.Element.Polyline, _walls, _usedWalls, direction, _lengthEpsilon);
+                    int wallIdx = Adjacency.FindAdjacent(current.Element.Rect, _walls, _usedWalls, direction, _lengthEpsilon);
                     if (wallIdx < 0) break;
 
                     var entry = new ChainEntry(_walls[wallIdx], wallIdx, isOpening: false);
@@ -95,7 +92,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter.ChainBuilding
                 }
                 else
                 {
-                    int openingIdx = Adjacency.FindAdjacent(current.Element.Polyline, _openings, _usedOpenings, direction, _lengthEpsilon);
+                    int openingIdx = Adjacency.FindAdjacent(current.Element.Rect, _openings, _usedOpenings, direction, _lengthEpsilon);
                     if (openingIdx < 0) break;
 
                     var entry = new ChainEntry(_openings[openingIdx], openingIdx, isOpening: true);
@@ -114,10 +111,10 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter.ChainBuilding
         private static ChainEntry GetEndpoint(List<ChainEntry> chainElements, Vec2 direction, bool forward)
         {
             ChainEntry best = chainElements[0];
-            double bestT = best.Element.Polyline.ProjectCenter2D(direction);
+            double bestT = best.Element.Rect.ProjectCenter2D(direction);
             for (int i = 1; i < chainElements.Count; i++)
             {
-                double t = chainElements[i].Element.Polyline.ProjectCenter2D(direction);
+                double t = chainElements[i].Element.Rect.ProjectCenter2D(direction);
                 if (forward ? t > bestT : t < bestT)
                 {
                     bestT = t;

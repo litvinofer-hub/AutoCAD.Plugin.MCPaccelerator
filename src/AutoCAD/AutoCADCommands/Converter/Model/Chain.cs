@@ -4,12 +4,12 @@ using MCPAccelerator.Utils.GeometryModel;
 namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter.Model
 {
     /// <summary>
-    /// A single entry in a chain: the tagged polyline, its original index in its
+    /// A single entry in a chain: the tagged rectangle, its original index in its
     /// source list, and whether it's an opening (window/door) or a wall.
     /// </summary>
-    public readonly struct ChainEntry(TaggedPolyline element, int originalIndex, bool isOpening)
+    public readonly struct ChainEntry(TaggedRect element, int originalIndex, bool isOpening)
     {
-        public TaggedPolyline Element { get; } = element;
+        public TaggedRect Element { get; } = element;
         public int OriginalIndex { get; } = originalIndex;
         public bool IsOpening { get; } = isOpening;
     }

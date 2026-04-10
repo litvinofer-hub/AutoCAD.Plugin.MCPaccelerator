@@ -36,7 +36,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter.WallCreation
         ///    the same frame and registers it on the merged wall.
         /// </summary>
         /// <param name="building">The building that will own the new wall and openings.</param>
-        /// <param name="chain">The chain of alternating wall/opening polylines to merge.</param>
+        /// <param name="chain">The chain of alternating wall/opening rectangles to merge.</param>
         /// <param name="botElevation">Bottom elevation (Z) of the merged wall.</param>
         /// <param name="topElevation">Top elevation (Z) of the merged wall.</param>
         /// <param name="result">Counters updated in-place: WallsCreated, WindowsCreated,
@@ -72,8 +72,8 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter.WallCreation
 
             foreach (var entry in chain.Elements)
             {
-                var poly = entry.Element.Polyline;
-                foreach (var p in poly.Points)
+                var rect = entry.Element.Rect;
+                foreach (var p in rect.Points)
                 {
                     var v = new Vec2(p.X, p.Y);
                     double t = Vec2Math.Dot(v, dir);
@@ -86,7 +86,9 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter.WallCreation
 
                 if (!entry.IsOpening)
                 {
-                    totalThickness += poly.Extent2D(perp);
+                    // Use the wall's extent along the chain perp axis (rather than its own
+                    // Thickness2D) so small misalignments between wall and chain are absorbed.
+                    totalThickness += rect.Extent2D(perp);
                     wallCount++;
                 }
             }
@@ -115,19 +117,21 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter.WallCreation
         /// and adds it to the given <paramref name="wall"/> as a window or door.
         /// Increments the corresponding counter on <paramref name="result"/>.
         /// </summary>
-        private static void TryAddOpening(Building building, Wall wall, TaggedPolyline element,
+        private static void TryAddOpening(Building building, Wall wall, TaggedRect element,
             Vec2 dir, ChainBounds bounds, double botElevation, FloorPlanResult result)
         {
-            var poly = element.Polyline;
+            var rect = element.Rect;
             double minT = double.MaxValue, maxT = double.MinValue;
-            foreach (var p in poly.Points)
+            foreach (var p in rect.Points)
             {
                 double t = p.X * dir.X + p.Y * dir.Y;
                 if (t < minT) minT = t;
                 if (t > maxT) maxT = t;
             }
 
-            double openingHeight = poly.Extent2D(bounds.Perp);
+            // Use the opening's extent along the CHAIN's perp axis (not the opening's own
+            // short side) so slight rotation relative to the chain is absorbed correctly.
+            double openingHeight = rect.Extent2D(bounds.Perp);
 
             var openStart = AxisFrameToWorld(minT, bounds.AvgPerp, dir, bounds.Perp);
             var openEnd = AxisFrameToWorld(maxT, bounds.AvgPerp, dir, bounds.Perp);

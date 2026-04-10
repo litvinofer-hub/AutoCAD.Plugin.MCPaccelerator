@@ -34,15 +34,17 @@ namespace MCPAccelerator.Utils.GeometryModel
         // =====================================================================
         // 2D geometry queries (project to XY plane, ignore Z).
         //
-        // These methods treat the polyline as a 2D shape on the XY plane.
-        // Rectangle-specific queries assume Points[0..3] describe a 4-vertex
-        // rectangle in order (either clockwise or counter-clockwise).
+        // These methods treat the polyline as a 2D shape on the XY plane and make
+        // no assumptions about its shape. Rectangle-specific queries (long axis,
+        // thickness, center line) live on <see cref="Rect"/>.
         // =====================================================================
 
         /// <summary>
         /// Centroid (average of all vertices) projected onto the XY plane.
+        /// Virtual so subclasses can correct for closing-point duplication
+        /// (see <see cref="Rect.Center2D"/>).
         /// </summary>
-        public Vec2 Center2D()
+        public virtual Vec2 Center2D()
         {
             double sumX = 0, sumY = 0;
             foreach (var p in Points)
@@ -51,59 +53,6 @@ namespace MCPAccelerator.Utils.GeometryModel
                 sumY += p.Y;
             }
             return new Vec2(sumX / Points.Count, sumY / Points.Count);
-        }
-
-        /// <summary>
-        /// Unit vector along the polyline's long axis, assuming it is a rectangle
-        /// defined by the first 4 points. Returns <c>null</c> if there are fewer than 4 points.
-        /// </summary>
-        public Vec2? LongAxisDirection2D()
-        {
-            if (Points.Count < 4) return null;
-
-            var p0 = new Vec2(Points[0].X, Points[0].Y);
-            var p1 = new Vec2(Points[1].X, Points[1].Y);
-            var p2 = new Vec2(Points[2].X, Points[2].Y);
-
-            double side1 = Vec2Math.Distance(p0, p1);
-            double side2 = Vec2Math.Distance(p1, p2);
-
-            var (start, end) = side1 >= side2 ? (p0, p1) : (p1, p2);
-            return Vec2Math.Normalize(Vec2Math.Subtract(end, start));
-        }
-
-        /// <summary>
-        /// Treats the polyline as a rectangle (first 4 vertices) and extracts its
-        /// center line and thickness using the long-axis heuristic. Safe only when
-        /// length &gt; thickness.
-        /// </summary>
-        public bool TryLongAxisRect2D(out Vec2 start, out Vec2 end, out double thickness)
-        {
-            start = end = Vec2.Zero;
-            thickness = 0;
-            if (Points.Count < 4) return false;
-
-            var p0 = new Vec2(Points[0].X, Points[0].Y);
-            var p1 = new Vec2(Points[1].X, Points[1].Y);
-            var p2 = new Vec2(Points[2].X, Points[2].Y);
-            var p3 = new Vec2(Points[3].X, Points[3].Y);
-
-            double side1 = Vec2Math.Distance(p0, p1);
-            double side2 = Vec2Math.Distance(p1, p2);
-
-            if (side1 >= side2)
-            {
-                start = Vec2Math.Mid(p0, p3);
-                end = Vec2Math.Mid(p1, p2);
-                thickness = side2;
-            }
-            else
-            {
-                start = Vec2Math.Mid(p0, p1);
-                end = Vec2Math.Mid(p3, p2);
-                thickness = side1;
-            }
-            return true;
         }
 
         /// <summary>
@@ -126,21 +75,6 @@ namespace MCPAccelerator.Utils.GeometryModel
                 if (t > max) max = t;
             }
             return max - min;
-        }
-
-        /// <summary>
-        /// Length of the shorter of the first two sides (the rectangular short side).
-        /// Returns <see cref="double.MaxValue"/> if there are fewer than 4 points.
-        /// </summary>
-        public double MinSide2D()
-        {
-            if (Points.Count < 4) return double.MaxValue;
-            var p0 = new Vec2(Points[0].X, Points[0].Y);
-            var p1 = new Vec2(Points[1].X, Points[1].Y);
-            var p2 = new Vec2(Points[2].X, Points[2].Y);
-            double s1 = Vec2Math.Distance(p0, p1);
-            double s2 = Vec2Math.Distance(p1, p2);
-            return s1 < s2 ? s1 : s2;
         }
 
         /// <summary>

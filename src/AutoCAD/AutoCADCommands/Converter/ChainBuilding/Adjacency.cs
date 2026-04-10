@@ -6,18 +6,18 @@ using MCPAccelerator.Utils.GeometryModel;
 namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter.ChainBuilding
 {
     /// <summary>
-    /// Tests for whether two floor-plan polylines are adjacent (share an edge) and lie on
+    /// Tests for whether two floor-plan rectangles are adjacent (share an edge) and lie on
     /// the same chain axis. Pure functions — no mutable state.
     /// </summary>
     public static class Adjacency
     {
         /// <summary>
-        /// Tolerance for calling two polylines "touching". Scales with the smaller
-        /// of their short sides to absorb floating-point snap gaps.
+        /// Tolerance for calling two rectangles "touching". Scales with the smaller
+        /// of their thicknesses (short sides) to absorb floating-point snap gaps.
         /// </summary>
-        public static double AdjacencyThreshold(Polyline a, Polyline b, double lengthEpsilon)
+        public static double AdjacencyThreshold(Rect a, Rect b, double lengthEpsilon)
         {
-            double reference = Math.Min(a.MinSide2D(), b.MinSide2D());
+            double reference = Math.Min(a.Thickness2D, b.Thickness2D);
             return Math.Max(reference * 0.5, lengthEpsilon);
         }
 
@@ -25,7 +25,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter.ChainBuilding
         /// True if <paramref name="a"/> and <paramref name="b"/> lie on the same axis
         /// (their centers are close in the perpendicular direction).
         /// </summary>
-        public static bool AreOnSameAxis(Polyline a, Polyline b, Vec2 direction)
+        public static bool AreOnSameAxis(Rect a, Rect b, Vec2 direction)
         {
             var perp = Vec2Math.Perpendicular(direction);
             double perpA = Vec2Math.Dot(a.Center2D(), perp);
@@ -39,8 +39,8 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter.ChainBuilding
         /// and (b) is on the same axis as <paramref name="direction"/>. Returns -1 if none qualify.
         /// </summary>
         public static int FindAdjacent(
-            Polyline current,
-            List<TaggedPolyline> candidates,
+            Rect current,
+            List<TaggedRect> candidates,
             HashSet<int> used,
             Vec2 direction,
             double lengthEpsilon)
@@ -52,7 +52,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter.ChainBuilding
             {
                 if (used.Contains(i)) continue;
 
-                var candidate = candidates[i].Polyline;
+                var candidate = candidates[i].Rect;
                 double dist = current.MinVertexDistance2D(candidate);
                 if (dist >= bestDist) continue;
                 if (dist >= AdjacencyThreshold(current, candidate, lengthEpsilon)) continue;

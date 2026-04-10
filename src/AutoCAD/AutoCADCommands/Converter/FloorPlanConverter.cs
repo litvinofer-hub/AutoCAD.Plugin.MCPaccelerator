@@ -7,7 +7,6 @@ using MCPAccelerator.Domain.BuildingModel;
 using MCPAccelerator.Utils.GeometryModel;
 using AcadPolyline = Autodesk.AutoCAD.DatabaseServices.Polyline;
 using GeomPoint = MCPAccelerator.Utils.GeometryModel.Point;
-using GeomPolyline = MCPAccelerator.Utils.GeometryModel.Polyline;
 
 namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter
 {
@@ -26,15 +25,13 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter
     /// - A chain always starts and ends with a wall.
     ///
     /// Pipeline:
-    /// 1. <see cref="ToTaggedPolylines"/>      — convert AutoCAD polylines into pure <see cref="GeomPolyline"/>s tagged with their role.
+    /// 1. <see cref="ToTaggedRects"/>          — convert AutoCAD polylines into pure <see cref="Rect"/>s tagged with their role.
     /// 2. <see cref="ChainBuilder"/>           — grow chains from each opening using <see cref="Adjacency"/>.
     /// 3. <see cref="ChainWallFactory"/>       — merge each chain into one wall with its openings.
-    /// 4. <see cref="StandaloneWallFactory"/>  — create a wall for every polyline no chain consumed.
+    /// 4. <see cref="StandaloneWallFactory"/>  — create a wall for every rectangle no chain consumed.
     ///
-    /// All pure geometry lives in <see cref="GeomPolyline"/>'s 2D methods (<c>Center2D</c>,
-    /// <c>LongAxisDirection2D</c>, <c>TryLongAxisRect2D</c>, <c>ProjectCenter2D</c>,
-    /// <c>Extent2D</c>, <c>MinSide2D</c>, <c>MinVertexDistance2D</c>), so future projects
-    /// can reuse the same geometry without depending on AutoCAD.
+    /// All pure geometry lives in <see cref="Rect"/> (and its base <see cref="Polyline"/>),
+    /// so future projects can reuse the same geometry without depending on AutoCAD.
     /// </summary>
     public static class FloorPlanConverter
     {
@@ -48,9 +45,9 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter
             double botElevation = story.BotLevel.Elevation;
             double topElevation = story.TopLevel.Elevation;
 
-            var walls = ToTaggedPolylines(wallPolylines, ElementType.Wall);
-            var openings = ToTaggedPolylines(windowPolylines, ElementType.Window)
-                .Concat(ToTaggedPolylines(doorPolylines, ElementType.Door))
+            var walls = ToTaggedRects(wallPolylines, ElementType.Wall);
+            var openings = ToTaggedRects(windowPolylines, ElementType.Window)
+                .Concat(ToTaggedRects(doorPolylines, ElementType.Door))
                 .ToList();
 
             var builder = new ChainBuilder(walls, openings, building.Units.LengthEpsilon);
@@ -71,26 +68,31 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter
         }
 
         /// <summary>
-        /// Flattens each AutoCAD polyline into a <see cref="GeomPolyline"/> of
-        /// <see cref="GeomPoint"/>s, tags it with its floor-plan role, and drops
-        /// degenerate shapes with fewer than 4 vertices (we need rectangles).
-        /// This is the only place AutoCAD geometry types touch the pipeline.
+        /// Flattens each AutoCAD polyline into a <see cref="Rect"/> (4 corners),
+        /// tags it with its floor-plan role, and drops shapes that don't have
+        /// exactly 4 corners. This is the only place AutoCAD geometry types
+        /// touch the pipeline.
         /// </summary>
-        private static List<TaggedPolyline> ToTaggedPolylines(List<AcadPolyline> polylines, ElementType type)
+        private static List<TaggedRect> ToTaggedRects(List<AcadPolyline> polylines, ElementType type)
         {
-            var list = new List<TaggedPolyline>(polylines.Count);
+            var list = new List<TaggedRect>(polylines.Count);
             foreach (var acad in polylines)
             {
                 int n = acad.NumberOfVertices;
                 if (n < 4) continue;
 
-                var points = new List<GeomPoint>(n);
-                for (int i = 0; i < n; i++)
+                var corners = new List<GeomPoint>(4);
+                for (int i = 0; i < 4; i++)
                 {
                     var p = acad.GetPoint3dAt(i);
-                    points.Add(new GeomPoint(p.X, p.Y, p.Z));
+                    corners.Add(new GeomPoint(p.X, p.Y, p.Z));
                 }
-                list.Add(new TaggedPolyline(new GeomPolyline(points), type));
+
+                Rect rect;
+                try { rect = new Rect(corners); }
+                catch { continue; } // not 4 distinct corners — skip
+
+                list.Add(new TaggedRect(rect, type));
             }
             return list;
         }
