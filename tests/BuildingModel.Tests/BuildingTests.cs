@@ -203,7 +203,7 @@ namespace MCPAccelerator.Tests.BuildingModel
             var wall = building.AddWall(0, 0, 10, 0,
                 botElevation: 0, topElevation: 3.0, thickness: 0.2);
 
-            var window = wall.AddWindow(building, 1, 0, 2, 0, z: 0, height: 2.0);
+            var window = building.AddWindow(wall, 1, 0, 2, 0, z: 0, height: 2.0);
 
             Assert.Single(wall.Openings);
             Assert.Equal(wall.Id, window.WallId);
@@ -216,7 +216,7 @@ namespace MCPAccelerator.Tests.BuildingModel
             var wall = building.AddWall(0, 0, 10, 0,
                 botElevation: 0, topElevation: 3.0, thickness: 0.2);
 
-            var door = wall.AddDoor(building, 3, 0, 5, 0, z: 0, height: 2.5);
+            var door = building.AddDoor(wall, 3, 0, 5, 0, z: 0, height: 2.5);
 
             Assert.Single(wall.Openings);
             Assert.Equal(wall.Id, door.WallId);
@@ -230,7 +230,7 @@ namespace MCPAccelerator.Tests.BuildingModel
                 botElevation: 0, topElevation: 3.0, thickness: 0.2);
 
             // Opening starts at wall start point (0,0,0)
-            var door = wall.AddDoor(building, 0, 0, 2, 0, z: 0, height: 2.5);
+            var door = building.AddDoor(wall, 0, 0, 2, 0, z: 0, height: 2.5);
 
             Assert.Same(wall.BotLine.StartPoint, door.Line.StartPoint);
         }
@@ -354,7 +354,7 @@ namespace MCPAccelerator.Tests.BuildingModel
                 botElevation: 0, topElevation: 3.0);
             var wall = building.AddWall(0, 0, 5, 0,
                 botElevation: 0, topElevation: 3.0, thickness: 0.2);
-            wall.AddWindow(building, 1, 0, 2, 0, z: 0, height: 2.0);
+            building.AddWindow(wall, 1, 0, 2, 0, z: 0, height: 2.0);
             building.AddStory(0, 3.0);
 
             // Shared levels

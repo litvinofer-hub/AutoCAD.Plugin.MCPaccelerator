@@ -92,6 +92,41 @@ namespace MCPAccelerator.Domain.BuildingModel
             return wall;
         }
 
+        /// <summary>
+        /// Creates a window on <paramref name="wall"/>. The window's endpoints go
+        /// through this building's flyweight point repository so they are shared
+        /// with any existing points at the same coordinates.
+        /// </summary>
+        public Window AddWindow(Wall wall, double x1, double y1, double x2, double y2,
+            double z, double height)
+        {
+            var line = CreateOpeningLine(x1, y1, x2, y2, z);
+            var window = new Window(wall.Id, height, line);
+            wall.AttachOpening(window);
+            return window;
+        }
+
+        /// <summary>
+        /// Creates a door on <paramref name="wall"/>. The door's endpoints go
+        /// through this building's flyweight point repository so they are shared
+        /// with any existing points at the same coordinates.
+        /// </summary>
+        public Door AddDoor(Wall wall, double x1, double y1, double x2, double y2,
+            double z, double height)
+        {
+            var line = CreateOpeningLine(x1, y1, x2, y2, z);
+            var door = new Door(wall.Id, height, line);
+            wall.AttachOpening(door);
+            return door;
+        }
+
+        private LineSegment CreateOpeningLine(double x1, double y1, double x2, double y2, double z)
+        {
+            Point start = GetOrAddPoint(x1, y1, z);
+            Point end = GetOrAddPoint(x2, y2, z);
+            return new LineSegment(start, end);
+        }
+
         public Story AddStory(double botElevation, double topElevation, string name = "",
             IEnumerable<double> intermediateElevations = null)
         {

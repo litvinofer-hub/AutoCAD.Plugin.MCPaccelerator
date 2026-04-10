@@ -67,7 +67,7 @@ namespace MCPAccelerator.Tests.BuildingModel
             var building = new Building();
             var wall = building.AddWall(0, 0, 5, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
 
-            var window = wall.AddWindow(building, 1, 0, 2, 0, z: 0, height: 2.0);
+            var window = building.AddWindow(wall, 1, 0, 2, 0, z: 0, height: 2.0);
 
             Assert.Single(wall.Openings);
             Assert.Equal(wall.Id, window.WallId);
@@ -80,7 +80,7 @@ namespace MCPAccelerator.Tests.BuildingModel
             var wall = building.AddWall(0, 0, 5, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
 
             Assert.Throws<ArgumentException>(() =>
-                wall.AddWindow(building, 6, 0, 7, 0, z: 0, height: 2.0));
+                building.AddWindow(wall, 6, 0, 7, 0, z: 0, height: 2.0));
         }
 
         [Fact]
@@ -90,7 +90,7 @@ namespace MCPAccelerator.Tests.BuildingModel
             var wall = building.AddWall(0, 0, 5, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
 
             Assert.Throws<ArgumentException>(() =>
-                wall.AddWindow(building, 1, 0, 2, 0, z: 0, height: 4.0));
+                building.AddWindow(wall, 1, 0, 2, 0, z: 0, height: 4.0));
         }
 
         [Fact]
@@ -99,7 +99,7 @@ namespace MCPAccelerator.Tests.BuildingModel
             var building = new Building();
             var wall = building.AddWall(0, 0, 5, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
 
-            wall.AddWindow(building, 1, 0, 2, 0, z: 1.0, height: 1.5);
+            building.AddWindow(wall, 1, 0, 2, 0, z: 1.0, height: 1.5);
 
             Assert.Single(wall.Openings);
         }
@@ -111,7 +111,7 @@ namespace MCPAccelerator.Tests.BuildingModel
             var wall = building.AddWall(0, 0, 5, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
 
             Assert.Throws<ArgumentException>(() =>
-                wall.AddWindow(building, 1, 0, 2, 0, z: 1.5, height: 2.0));
+                building.AddWindow(wall, 1, 0, 2, 0, z: 1.5, height: 2.0));
         }
 
         [Fact]
@@ -121,7 +121,7 @@ namespace MCPAccelerator.Tests.BuildingModel
             var wall = building.AddWall(0, 0, 5, 0, botElevation: 3.0, topElevation: 6.0, thickness: 0.2);
 
             Assert.Throws<ArgumentException>(() =>
-                wall.AddWindow(building, 1, 0, 2, 0, z: 2.0, height: 1.0));
+                building.AddWindow(wall, 1, 0, 2, 0, z: 2.0, height: 1.0));
         }
 
         [Fact]
@@ -135,7 +135,7 @@ namespace MCPAccelerator.Tests.BuildingModel
             // This validation is inherently satisfied by the API.
             // Test kept for documentation: the new API prevents non-horizontal openings by design.
             Assert.Single(wall.Openings,
-                wall.AddWindow(building, 1, 0, 2, 0, z: 0, height: 1.0));
+                building.AddWindow(wall, 1, 0, 2, 0, z: 0, height: 1.0));
         }
 
         [Fact]
@@ -144,7 +144,7 @@ namespace MCPAccelerator.Tests.BuildingModel
             var building = new Building();
             var wall = building.AddWall(0, 0, 5, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
 
-            wall.AddDoor(building, 1, 0, 2, 0, z: 0, height: 3.0);
+            building.AddDoor(wall, 1, 0, 2, 0, z: 0, height: 3.0);
 
             Assert.Single(wall.Openings);
         }
@@ -156,7 +156,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         {
             var building = new Building();
             var wall = building.AddWall(0, 0, 5, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
-            var window = wall.AddWindow(building, 1, 0, 2, 0, z: 0, height: 2.0);
+            var window = building.AddWindow(wall, 1, 0, 2, 0, z: 0, height: 2.0);
 
             var removed = wall.RemoveOpening(window);
 
@@ -173,7 +173,7 @@ namespace MCPAccelerator.Tests.BuildingModel
             var wall = building.AddWall(0, 0, 10, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
 
             // Door starts at same point as wall start (0,0,0)
-            var door = wall.AddDoor(building, 0, 0, 2, 0, z: 0, height: 2.5);
+            var door = building.AddDoor(wall, 0, 0, 2, 0, z: 0, height: 2.5);
 
             Assert.Same(wall.BotLine.StartPoint, door.Line.StartPoint);
         }
@@ -187,7 +187,7 @@ namespace MCPAccelerator.Tests.BuildingModel
             var wall = building.AddWall(0, 0, 5, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
 
             Assert.Throws<ArgumentException>(() =>
-                wall.AddWindow(building, 1, 0, 2, 0, z: 4.0, height: 1.0));
+                building.AddWindow(wall, 1, 0, 2, 0, z: 4.0, height: 1.0));
         }
 
         [Fact]
@@ -196,7 +196,7 @@ namespace MCPAccelerator.Tests.BuildingModel
             var building = new Building();
             var wall = building.AddWall(0, 0, 5, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
 
-            wall.AddWindow(building, 1, 0, 2, 0, z: 3.0, height: 0);
+            building.AddWindow(wall, 1, 0, 2, 0, z: 3.0, height: 0);
 
             Assert.Single(wall.Openings);
         }
@@ -207,7 +207,7 @@ namespace MCPAccelerator.Tests.BuildingModel
             var building = new Building();
             var wall = building.AddWall(0, 0, 5, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
 
-            wall.AddWindow(building, 1, 0, 2, 0, z: 0, height: 0);
+            building.AddWindow(wall, 1, 0, 2, 0, z: 0, height: 0);
 
             Assert.Single(wall.Openings);
         }
@@ -219,7 +219,7 @@ namespace MCPAccelerator.Tests.BuildingModel
             var wall = building.AddWall(0, 0, 5, 0, botElevation: 3.0, topElevation: 6.0, thickness: 0.2);
 
             Assert.Throws<ArgumentException>(() =>
-                wall.AddDoor(building, 1, 0, 2, 0, z: 3.0, height: -1.0));
+                building.AddDoor(wall, 1, 0, 2, 0, z: 3.0, height: -1.0));
         }
     }
 }

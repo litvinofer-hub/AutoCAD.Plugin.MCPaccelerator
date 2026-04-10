@@ -162,12 +162,12 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter.WallCreation
                 switch (element.Type)
                 {
                     case ElementType.Window:
-                        wall.AddWindow(building, openStart.X, openStart.Y, openEnd.X, openEnd.Y,
+                        building.AddWindow(wall, openStart.X, openStart.Y, openEnd.X, openEnd.Y,
                             sillZ, height);
                         result.WindowsCreated++;
                         break;
                     case ElementType.Door:
-                        wall.AddDoor(building, openStart.X, openStart.Y, openEnd.X, openEnd.Y,
+                        building.AddDoor(wall, openStart.X, openStart.Y, openEnd.X, openEnd.Y,
                             sillZ, height);
                         result.DoorsCreated++;
                         break;

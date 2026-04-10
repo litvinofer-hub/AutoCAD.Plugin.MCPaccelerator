@@ -46,7 +46,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         {
             var building = new Building();
             var wall = building.AddWall(0, 0, 10, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
-            wall.AddWindow(building, 1, 0, 2, 0, z: 0, height: 2.0);
+            building.AddWindow(wall, 1, 0, 2, 0, z: 0, height: 2.0);
 
             var points = building.GetPoints().ToList();
 

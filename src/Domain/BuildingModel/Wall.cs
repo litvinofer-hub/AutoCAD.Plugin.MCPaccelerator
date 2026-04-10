@@ -41,27 +41,22 @@ namespace MCPAccelerator.Domain.BuildingModel
             _openings = new List<WallOpening>();
         }
 
-        public Door AddDoor(Building building, double x1, double y1, double x2, double y2,
-            double z, double height)
-        {
-            var line = CreateOpeningLine(building, x1, y1, x2, y2, z);
-            var door = new Door(this.Id, height, line);
-            ValidateAndAddOpening(door);
-            return door;
-        }
-
-        public Window AddWindow(Building building, double x1, double y1, double x2, double y2,
-            double z, double height)
-        {
-            var line = CreateOpeningLine(building, x1, y1, x2, y2, z);
-            var window = new Window(this.Id, height, line);
-            ValidateAndAddOpening(window);
-            return window;
-        }
-
         public bool RemoveOpening(WallOpening opening)
         {
             return _openings.Remove(opening);
+        }
+
+        /// <summary>
+        /// Validates and attaches a pre-built opening to this wall.
+        /// Called by <see cref="Building.AddWindow"/> / <see cref="Building.AddDoor"/>,
+        /// which are responsible for building the opening with shared (flyweight) points.
+        /// </summary>
+        internal void AttachOpening(WallOpening opening)
+        {
+            ValidateOpeningLineXY(opening);
+            ValidateOpeningLineZ(opening);
+            ValidateOpeningHeight(opening);
+            _openings.Add(opening);
         }
 
         public IEnumerable<Point> GetPoints()
@@ -74,21 +69,6 @@ namespace MCPAccelerator.Domain.BuildingModel
                 foreach (var point in opening.GetPoints())
                     yield return point;
             }
-        }
-
-        private LineSegment CreateOpeningLine(Building building, double x1, double y1, double x2, double y2, double z)
-        {
-            Point start = building.GetOrAddPoint(x1, y1, z);
-            Point end = building.GetOrAddPoint(x2, y2, z);
-            return new LineSegment(start, end);
-        }
-
-        private void ValidateAndAddOpening(WallOpening opening)
-        {
-            ValidateOpeningLineXY(opening);
-            ValidateOpeningLineZ(opening);
-            ValidateOpeningHeight(opening);
-            _openings.Add(opening);
         }
 
         /// <summary>
