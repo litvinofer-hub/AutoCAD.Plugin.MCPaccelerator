@@ -59,15 +59,6 @@ namespace MCPAccelerator.Domain.BuildingModel
             return window;
         }
 
-        public Void AddVoid(Building building, double x1, double y1, double x2, double y2,
-            double z, double height)
-        {
-            var line = CreateOpeningLine(building, x1, y1, x2, y2, z);
-            var v = new Void(this.Id, height, line);
-            ValidateAndAddOpening(v);
-            return v;
-        }
-
         public bool RemoveOpening(WallOpening opening)
         {
             return _openings.Remove(opening);

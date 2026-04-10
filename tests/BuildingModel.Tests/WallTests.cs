@@ -149,18 +149,6 @@ namespace MCPAccelerator.Tests.BuildingModel
             Assert.Single(wall.Openings);
         }
 
-        [Fact]
-        public void AddVoid_ValidOpening_AddsToList()
-        {
-            var building = new Building();
-            var wall = building.AddWall(0, 0, 5, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
-
-            var v = wall.AddVoid(building, 1, 0, 2, 0, z: 0, height: 2.0);
-
-            Assert.Single(wall.Openings);
-            Assert.Equal(wall.Id, v.WallId);
-        }
-
         // --- RemoveOpening ---
 
         [Fact]
