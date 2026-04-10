@@ -4,9 +4,11 @@ using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
 using MCPAccelerator.AutoCAD.AutoCADCommands.Converter;
 using MCPAccelerator.Domain.BuildingModel;
+using MCPAccelerator.Utils.GeometryModel;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Polyline = Autodesk.AutoCAD.DatabaseServices.Polyline;
 
 // NETLOAD
 // C:\Users\Ofer\Desktop\MCPaccelerator\src\AutoCAD\AutoCADCommands\bin\Debug\net10.0\MCPAccelerator.AutoCAD.AutoCADCommands.dll
@@ -36,10 +38,31 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands
                 return;
             }
 
-            var building = BuildingSession.Add(
-                string.IsNullOrWhiteSpace(nameResult.StringResult) ? null : nameResult.StringResult);
+            // Prompt unit system
+            var unitKeywords = new PromptKeywordOptions("\nChoose unit system")
+            {
+                AllowNone = true
+            };
+            unitKeywords.Keywords.Add("Inches");
+            unitKeywords.Keywords.Add("Meters");
+            unitKeywords.Keywords.Default = "Inches";
+            var unitResult = editor.GetKeywords(unitKeywords);
 
-            editor.WriteMessage($"\nBuilding '{building.Name}' created.");
+            if (unitResult.Status != PromptStatus.OK && unitResult.Status != PromptStatus.None)
+            {
+                editor.WriteMessage("\nCancelled.");
+                return;
+            }
+
+            UnitSystem units = unitResult.StringResult == "Meters"
+                ? UnitSystem.Meters()
+                : UnitSystem.Inches();
+
+            var building = BuildingSession.Add(
+                string.IsNullOrWhiteSpace(nameResult.StringResult) ? null : nameResult.StringResult,
+                units);
+
+            editor.WriteMessage($"\nBuilding '{building.Name}' created ({building.Units.Unit}).");
 
             // Prompt number of stories
             var storyCountResult = editor.GetInteger(
@@ -58,8 +81,8 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands
             for (int i = 0; i < storyCount; i++)
             {
                 string defaultName = GetOrdinalName(i + 1) + " Story";
-                double defaultBot = i * 3.0;
-                double defaultTop = (i + 1) * 3.0;
+                double defaultBot = i * building.Units.DefaultStoryHeight;
+                double defaultTop = (i + 1) * building.Units.DefaultStoryHeight;
 
                 // Prompt story name
                 var storyNameResult = editor.GetString(

@@ -5,10 +5,17 @@ using MCPAccelerator.Utils.GeometryModel;
 
 namespace MCPAccelerator.Domain.BuildingModel
 {
-    public class Building(string name = "") : IHavePoints
+    public class Building(string name = "", UnitSystem units = null) : IHavePoints
     {
         public Guid Id { get; private set; } = Guid.NewGuid();
         public string Name { get; private set; } = name;
+
+        /// <summary>
+        /// The unit system (inches, meters, ...) and length-dependent defaults
+        /// (story height, wall thickness, epsilon) used by this building.
+        /// Defaults to <see cref="UnitSystem.Inches"/> when not specified.
+        /// </summary>
+        public UnitSystem Units { get; private set; } = units ?? UnitSystem.Inches();
 
         private readonly Dictionary<Point, Point> _uniquePoints = [];
         private readonly List<Level> _levels = [];

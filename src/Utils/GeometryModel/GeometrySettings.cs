@@ -2,8 +2,16 @@ using System;
 
 namespace MCPAccelerator.Utils.GeometryModel
 {
+    /// <summary>
+    /// Dimensionless, project-wide numerical settings. Unit-dependent values
+    /// (story height, wall thickness, etc.) live on <see cref="UnitSystem"/>
+    /// and are attached to a Building instance.
+    /// </summary>
     public static class GeometrySettings
     {
+        /// <summary>
+        /// Numerical tolerance for floating-point comparisons. Dimensionless.
+        /// </summary>
         public const double Tolerance = 1e-6;
 
         /// <summary>

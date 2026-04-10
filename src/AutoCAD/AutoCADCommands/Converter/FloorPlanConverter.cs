@@ -68,11 +68,13 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter
             var usedOpenings = new HashSet<int>();
             var chains = new List<Chain>();
 
+            double lengthEpsilon = building.Units.LengthEpsilon;
+
             for (int i = 0; i < openingElements.Count; i++)
             {
                 if (usedOpenings.Contains(i)) continue;
 
-                var chain = BuildChain(i, openingElements, wallElements, usedOpenings, usedWalls);
+                var chain = BuildChain(i, openingElements, wallElements, usedOpenings, usedWalls, lengthEpsilon);
                 if (chain != null)
                     chains.Add(chain);
             }
@@ -108,7 +110,8 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter
             List<PolylineElement> openingElements,
             List<PolylineElement> wallElements,
             HashSet<int> usedOpenings,
-            HashSet<int> usedWalls)
+            HashSet<int> usedWalls,
+            double lengthEpsilon)
         {
             var startOpening = openingElements[startOpeningIdx];
             var direction = GetOpeningDirection(startOpening);
@@ -123,8 +126,8 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter
             usedOpenings.Add(startOpeningIdx);
 
             // Walk in both directions (positive and negative along dir)
-            WalkDirection(chainElements, dir, openingElements, wallElements, usedOpenings, usedWalls, forward: true);
-            WalkDirection(chainElements, dir, openingElements, wallElements, usedOpenings, usedWalls, forward: false);
+            WalkDirection(chainElements, dir, openingElements, wallElements, usedOpenings, usedWalls, forward: true, lengthEpsilon);
+            WalkDirection(chainElements, dir, openingElements, wallElements, usedOpenings, usedWalls, forward: false, lengthEpsilon);
 
             // Sort chain elements along the direction
             chainElements.Sort((a, b) =>
@@ -152,7 +155,8 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter
             List<PolylineElement> wallElements,
             HashSet<int> usedOpenings,
             HashSet<int> usedWalls,
-            bool forward)
+            bool forward,
+            double lengthEpsilon)
         {
             // Get the current outermost element in this direction
             var current = forward
@@ -166,7 +170,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter
                 if (expectWall)
                 {
                     // Find adjacent wall
-                    int wallIdx = FindAdjacentElement(current.element, wallElements, usedWalls, direction);
+                    int wallIdx = FindAdjacentElement(current.element, wallElements, usedWalls, direction, lengthEpsilon);
                     if (wallIdx < 0) break;
 
                     var wallEl = (wallElements[wallIdx], wallIdx, false);
@@ -178,7 +182,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter
                 else
                 {
                     // Find adjacent opening
-                    int openingIdx = FindAdjacentElement(current.element, openingElements, usedOpenings, direction);
+                    int openingIdx = FindAdjacentElement(current.element, openingElements, usedOpenings, direction, lengthEpsilon);
                     if (openingIdx < 0) break;
 
                     var openingEl = (openingElements[openingIdx], openingIdx, true);
@@ -197,7 +201,8 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter
             PolylineElement current,
             List<PolylineElement> candidates,
             HashSet<int> used,
-            Point2d direction)
+            Point2d direction,
+            double lengthEpsilon)
         {
             int bestIdx = -1;
             double bestDist = double.MaxValue;
@@ -207,7 +212,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter
                 if (used.Contains(i)) continue;
 
                 double dist = MinVertexDistance(current, candidates[i]);
-                if (dist < bestDist && dist < GetAdjacencyThreshold(current, candidates[i]))
+                if (dist < bestDist && dist < GetAdjacencyThreshold(current, candidates[i], lengthEpsilon))
                 {
                     // Verify they are along the same axis (perpendicular distance is small)
                     if (AreOnSameAxis(current, candidates[i], direction))
@@ -240,7 +245,6 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter
             // Project all vertices of all elements onto the chain direction
             // to find the overall start and end
             double minT = double.MaxValue, maxT = double.MinValue;
-            Point2d minPt = default, maxPt = default;
             double totalThickness = 0;
             int wallCount = 0;
 
@@ -279,7 +283,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter
             }
 
             double avgPerp = perpSum / vertexCount;
-            double thickness = wallCount > 0 ? totalThickness / wallCount : 0.2;
+            double thickness = wallCount > 0 ? totalThickness / wallCount : building.Units.DefaultWallThickness;
 
             // Center line endpoints: project min/max T back to 2D using the average perp
             var startPt = new Point2d(minT * dir.X + avgPerp * perp.X, minT * dir.Y + avgPerp * perp.Y);
@@ -446,7 +450,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter
         /// In a floor plan, adjacent wall/opening rectangles share edges, so distance ~ 0.
         /// We allow a small tolerance for floating point imprecision.
         /// </summary>
-        private static double GetAdjacencyThreshold(PolylineElement a, PolylineElement b)
+        private static double GetAdjacencyThreshold(PolylineElement a, PolylineElement b, double lengthEpsilon)
         {
             // Use the smaller of the two elements' shortest sides as reference
             double aMin = MinSide(a);
@@ -455,7 +459,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter
 
             // Adjacent elements share edges — distance should be near zero
             // Allow up to half the smaller side as tolerance for snapping gaps
-            return Math.Max(reference * 0.5, GeometrySettings.Tolerance * 1000);
+            return Math.Max(reference * 0.5, lengthEpsilon);
         }
 
         /// <summary>
@@ -518,13 +522,13 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter
             return Math.Min(s1, s2);
         }
 
-        private static Point2d To2d(Point3d p) => new Point2d(p.X, p.Y);
+        private static Point2d To2d(Point3d p) => new(p.X, p.Y);
 
         private static Point2d Mid2d(Point3d a, Point3d b)
-            => new Point2d((a.X + b.X) / 2, (a.Y + b.Y) / 2);
+            => new((a.X + b.X) / 2, (a.Y + b.Y) / 2);
 
         private static Point2d Subtract(Point2d a, Point2d b)
-            => new Point2d(a.X - b.X, a.Y - b.Y);
+            => new(a.X - b.X, a.Y - b.Y);
 
         private static Point2d Normalize(Point2d v)
         {

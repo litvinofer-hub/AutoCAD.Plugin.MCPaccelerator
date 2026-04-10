@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using MCPAccelerator.Domain.BuildingModel;
+using MCPAccelerator.Utils.GeometryModel;
 
 namespace MCPAccelerator.AutoCAD.AutoCADCommands
 {
@@ -15,7 +16,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands
 
         public static IReadOnlyList<Building> Buildings => _buildings.AsReadOnly();
 
-        public static Building Add(string name = null)
+        public static Building Add(string name = null, UnitSystem units = null)
         {
             if (string.IsNullOrWhiteSpace(name))
             {
@@ -23,7 +24,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands
                 name = $"Building{_counter}";
             }
 
-            var building = new Building(name);
+            var building = new Building(name, units);
             _buildings.Add(building);
             return building;
         }
