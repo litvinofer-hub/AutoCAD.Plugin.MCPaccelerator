@@ -55,6 +55,24 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter.WallCreation
         }
 
         /// <summary>
+        /// Returns the sill Z (bottom of the opening) and vertical height for a given
+        /// opening type, pulled from the building's <see cref="UnitSystem"/>. A 2D
+        /// floor plan carries no vertical information for openings, so these come
+        /// from unit-system defaults, not from the polyline.
+        /// </summary>
+        private static (double sillZ, double height) ResolveOpeningZAndHeight(
+            Building building, ElementType type, double botElevation)
+        {
+            var units = building.Units;
+            return type switch
+            {
+                ElementType.Window => (botElevation + units.DefaultWindowSillHeight, units.DefaultWindowHeight),
+                ElementType.Door   => (botElevation + units.DefaultDoorSillHeight,   units.DefaultDoorHeight),
+                _ => (botElevation, 0),
+            };
+        }
+
+        /// <summary>
         /// Projects every vertex of every element in the chain onto the chain's axis,
         /// computing min/max along the axis and an average perpendicular offset. Also
         /// averages per-wall thicknesses (or falls back to the unit system default).
@@ -113,9 +131,14 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter.WallCreation
         }
 
         /// <summary>
-        /// Projects one opening element onto the chain axis, converts back to 2D,
-        /// and adds it to the given <paramref name="wall"/> as a window or door.
+        /// Projects one opening element onto the chain axis to get its 2D endpoints,
+        /// resolves its vertical (sill Z + height) from the building's <see cref="UnitSystem"/>,
+        /// and adds it to <paramref name="wall"/> as a window or door.
         /// Increments the corresponding counter on <paramref name="result"/>.
+        ///
+        /// Note: the rectangle's width comes from the floor plan, but its height and
+        /// sill elevation come from the unit system — a 2D floor plan carries no
+        /// vertical information for openings.
         /// </summary>
         private static void TryAddOpening(Building building, Wall wall, TaggedRect element,
             Vec2 dir, ChainBounds bounds, double botElevation, FloorPlanResult result)
@@ -129,12 +152,10 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter.WallCreation
                 if (t > maxT) maxT = t;
             }
 
-            // Use the opening's extent along the CHAIN's perp axis (not the opening's own
-            // short side) so slight rotation relative to the chain is absorbed correctly.
-            double openingHeight = rect.Extent2D(bounds.Perp);
-
             var openStart = AxisFrameToWorld(minT, bounds.AvgPerp, dir, bounds.Perp);
             var openEnd = AxisFrameToWorld(maxT, bounds.AvgPerp, dir, bounds.Perp);
+
+            var (sillZ, height) = ResolveOpeningZAndHeight(building, element.Type, botElevation);
 
             try
             {
@@ -142,12 +163,12 @@ namespace MCPAccelerator.AutoCAD.AutoCADCommands.Converter.WallCreation
                 {
                     case ElementType.Window:
                         wall.AddWindow(building, openStart.X, openStart.Y, openEnd.X, openEnd.Y,
-                            botElevation, openingHeight);
+                            sillZ, height);
                         result.WindowsCreated++;
                         break;
                     case ElementType.Door:
                         wall.AddDoor(building, openStart.X, openStart.Y, openEnd.X, openEnd.Y,
-                            botElevation, openingHeight);
+                            sillZ, height);
                         result.DoorsCreated++;
                         break;
                 }
