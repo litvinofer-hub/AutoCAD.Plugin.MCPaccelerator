@@ -76,7 +76,10 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Converter.WallCreation
 
             foreach (var elem in chain.Walls.Concat(chain.Openings))
             {
-                foreach (var p in elem.Rect.Points)
+                // Rect.Points is closed (first corner duplicated at the end).
+                // Take only the 4 unique corners so neither the span nor the
+                // perpendicular average is biased toward the first vertex.
+                foreach (var p in elem.Rect.Points.Take(4))
                 {
                     double t = p.X * dir.X + p.Y * dir.Y;
                     perpSum += p.X * perp.X + p.Y * perp.Y;
@@ -100,7 +103,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Converter.WallCreation
             Rect opening, Vec2 dir, ChainBounds bounds)
         {
             double minT = double.MaxValue, maxT = double.MinValue;
-            foreach (var p in opening.Points)
+            foreach (var p in opening.Points.Take(4))
             {
                 double t = p.X * dir.X + p.Y * dir.Y;
                 if (t < minT) minT = t;

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>MCPAccelerator.Tests.FloorPlanConverter</RootNamespace>
+    <AssemblyName>MCPAccelerator.Tests.FloorPlanConverter</AssemblyName>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AutoCAD\AutoCADPlugin\AutoCADPlugin.csproj" />
+    <ProjectReference Include="..\..\src\Utils\GeometryModel\GeometryModel.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" Version="1.*" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.*" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />
+  </ItemGroup>
+
+</Project>
