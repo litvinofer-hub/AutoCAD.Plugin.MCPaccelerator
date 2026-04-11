@@ -63,21 +63,6 @@ namespace MCPAccelerator.Utils.GeometryModel
             => Vec2Math.Dot(Center2D(), direction);
 
         /// <summary>
-        /// Extent (max − min) of the polyline's vertices along an axis on the XY plane.
-        /// </summary>
-        public double Extent2D(Vec2 axis)
-        {
-            double min = double.MaxValue, max = double.MinValue;
-            foreach (var p in Points)
-            {
-                double t = p.X * axis.X + p.Y * axis.Y;
-                if (t < min) min = t;
-                if (t > max) max = t;
-            }
-            return max - min;
-        }
-
-        /// <summary>
         /// Minimum 2D distance between any vertex of this polyline and any vertex
         /// of <paramref name="other"/>. Used to detect touching/adjacent polylines.
         /// </summary>

@@ -18,17 +18,16 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Converter.WallCreation
         /// </summary>
         /// <param name="building">The building that will own the new wall.</param>
         /// <param name="element">The tagged wall rectangle (tag is ignored here — only walls reach this path).</param>
-        /// <param name="botElevation">Bottom elevation (Z) of the wall.</param>
-        /// <param name="topElevation">Top elevation (Z) of the wall.</param>
+        /// <param name="story">The story this wall belongs to (chosen by the user).</param>
         /// <param name="result">Counters updated in-place: <c>WallsCreated</c>.</param>
         public static void Create(Building building, TaggedRect element,
-            double botElevation, double topElevation, FloorPlanResult result)
+            Story story, FloorPlanResult result)
         {
             var rect = element.Rect;
             building.AddWall(
                 rect.CenterLineStart2D.X, rect.CenterLineStart2D.Y,
                 rect.CenterLineEnd2D.X, rect.CenterLineEnd2D.Y,
-                botElevation, topElevation, rect.Thickness2D);
+                story, rect.Thickness2D);
             result.WallsCreated++;
         }
     }

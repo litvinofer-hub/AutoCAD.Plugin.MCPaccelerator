@@ -21,6 +21,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         public void GetPoints_WithRoom_ReturnsPolygonPoints()
         {
             var building = new Building();
+            building.AddStory(0, 3.0);
             building.AddRoom(
                 new[] { (0.0, 0.0), (5.0, 0.0), (5.0, 5.0), (0.0, 5.0) },
                 botElevation: 0, topElevation: 3.0);
@@ -34,6 +35,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         public void GetPoints_WithWall_ReturnsLineEndpoints()
         {
             var building = new Building();
+            building.AddStory(0, 3.0);
             building.AddWall(0, 0, 10, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
 
             var points = building.GetPoints().ToList();
@@ -45,6 +47,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         public void GetPoints_WithWallAndOpening_ReturnsAllEndpoints()
         {
             var building = new Building();
+            building.AddStory(0, 3.0);
             var wall = building.AddWall(0, 0, 10, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
             building.AddWindow(wall, 1, 0, 2, 0, z: 0, height: 2.0);
 
@@ -58,6 +61,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         public void GetPoints_WithRoomAndWall_ReturnsAllPoints()
         {
             var building = new Building();
+            building.AddStory(0, 3.0);
             building.AddRoom(
                 new[] { (0.0, 0.0), (5.0, 0.0), (5.0, 5.0) },
                 botElevation: 0, topElevation: 3.0);
@@ -76,6 +80,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         public void Building_PointsCreatedThroughAdd_SharedReferencesAreReused()
         {
             var building = new Building();
+            building.AddStory(0, 3.0);
             building.AddRoom(
                 new[] { (0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0) },
                 botElevation: 0, topElevation: 3.0);
@@ -99,6 +104,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         public void Building_SharedPointsAcrossElements_AreSameInstance()
         {
             var building = new Building();
+            building.AddStory(0, 3.0);
             var room = building.AddRoom(
                 new[] { (0.0, 0.0), (5.0, 0.0), (5.0, 5.0) },
                 botElevation: 0, topElevation: 3.0);

@@ -11,6 +11,13 @@ namespace MCPAccelerator.Domain.BuildingModel
         public Guid BuildingId { get; private set; }
 
         /// <summary>
+        /// Id of the story this wall belongs to. Walls cannot exist without a
+        /// story — <see cref="Building.AddWall(double, double, double, double, Story, double)"/>
+        /// and the elevation-based overload both enforce this invariant.
+        /// </summary>
+        public Guid StoryId { get; private set; }
+
+        /// <summary>
         /// 2D line at the bottom elevation. Z coordinates match BotLevel.Elevation.
         /// </summary>
         public LineSegment BotLine { get; private set; }
@@ -27,18 +34,87 @@ namespace MCPAccelerator.Domain.BuildingModel
 
         public double Height => TopLevel.Elevation - BotLevel.Elevation;
 
-        public Wall(Guid buildingId, LineSegment botLine, double thickness, Level topLevel, IReadOnlyList<Level> buildingLevels)
+        public Wall(Guid buildingId, LineSegment botLine, double thickness, Level topLevel,
+            IReadOnlyList<Level> buildingLevels, Guid storyId)
         {
             double lineZ = GetAndValidateLineZ(botLine);
             Level botLevel = FindMatchingLevel(lineZ, buildingLevels);
+            if (storyId == Guid.Empty)
+                throw new ArgumentException("Wall must belong to a story (storyId cannot be empty).", nameof(storyId));
 
             Id = Guid.NewGuid();
             BuildingId = buildingId;
+            StoryId = storyId;
             BotLine = botLine;
             Thickness = thickness;
             BotLevel = botLevel;
             TopLevel = topLevel;
             _openings = new List<WallOpening>();
+        }
+
+        /// <summary>
+        /// Splits this wall into its solid 2D sub-wall rectangles — the pieces of
+        /// the wall that remain once the openings are subtracted.
+        ///
+        /// Rules (each opening is projected onto the wall's bottom line):
+        /// <list type="bullet">
+        /// <item>0 openings → 1 rect (the whole wall).</item>
+        /// <item>1 opening  → 2 rects: before and after the opening.</item>
+        /// <item>2 openings → 3 rects: before, between, after.</item>
+        /// <item>N openings → N + 1 rects in order along the wall.</item>
+        /// </list>
+        /// Rectangles are built at Z = 0 (pure 2D / floor plan) with the wall's
+        /// thickness. Degenerate (zero-length) pieces — e.g. an opening touching
+        /// the wall's start or end — are omitted so callers always get valid rects.
+        /// </summary>
+        public List<Rect> SubWalls()
+        {
+            var wallStart = new Vec2(BotLine.StartPoint.X, BotLine.StartPoint.Y);
+            var wallEnd   = new Vec2(BotLine.EndPoint.X,   BotLine.EndPoint.Y);
+            double length = Vec2Math.Distance(wallStart, wallEnd);
+            if (length <= 0) return new List<Rect>();
+
+            var dir = Vec2Math.Normalize(Vec2Math.Subtract(wallEnd, wallStart));
+
+            // Project each opening onto the wall axis → [tMin, tMax] intervals
+            // measured from the wall's start point.
+            var intervals = new List<(double min, double max)>(_openings.Count);
+            foreach (var op in _openings)
+            {
+                double t1 = ProjectOntoAxis(op.Line.StartPoint, wallStart, dir);
+                double t2 = ProjectOntoAxis(op.Line.EndPoint,   wallStart, dir);
+                if (t1 > t2) (t1, t2) = (t2, t1);
+                intervals.Add((t1, t2));
+            }
+            intervals.Sort((a, b) => a.min.CompareTo(b.min));
+
+            // Walk the axis from 0 to length, emitting a rect for each gap
+            // between consecutive opening boundaries.
+            var result = new List<Rect>(_openings.Count + 1);
+            double cursor = 0;
+            foreach (var (imin, imax) in intervals)
+            {
+                TryEmitSubWall(result, cursor, imin, wallStart, dir);
+                cursor = imax;
+            }
+            TryEmitSubWall(result, cursor, length, wallStart, dir);
+            return result;
+        }
+
+        private void TryEmitSubWall(List<Rect> result, double tStart, double tEnd, Vec2 wallStart, Vec2 dir)
+        {
+            if (GeometrySettings.IsLessThan(tEnd, tStart) || GeometrySettings.AreEqual(tStart, tEnd))
+                return; // degenerate piece — skip
+
+            var a = new Point(wallStart.X + dir.X * tStart, wallStart.Y + dir.Y * tStart, 0);
+            var b = new Point(wallStart.X + dir.X * tEnd,   wallStart.Y + dir.Y * tEnd,   0);
+            result.Add(new LineSegment(a, b).ToRect(Thickness));
+        }
+
+        private static double ProjectOntoAxis(Point p, Vec2 origin, Vec2 dir)
+        {
+            var v = new Vec2(p.X - origin.X, p.Y - origin.Y);
+            return Vec2Math.Dot(v, dir);
         }
 
         public bool RemoveOpening(WallOpening opening)

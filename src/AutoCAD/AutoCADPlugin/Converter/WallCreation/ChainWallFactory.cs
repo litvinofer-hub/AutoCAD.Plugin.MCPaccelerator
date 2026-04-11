@@ -1,3 +1,4 @@
+using System.Linq;
 using MCPAccelerator.AutoCAD.AutoCADPlugin.Converter.Model;
 using MCPAccelerator.Domain.BuildingModel;
 using MCPAccelerator.Utils.GeometryModel;
@@ -5,77 +6,60 @@ using MCPAccelerator.Utils.GeometryModel;
 namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Converter.WallCreation
 {
     /// <summary>
-    /// Collapses a chain (walls + openings) into one merged <see cref="Wall"/> on the
-    /// building, then projects each opening inside the chain onto the merged wall and
-    /// registers it as a window or door.
+    /// Collapses one chain (walls + openings) into one merged <see cref="Wall"/>
+    /// on the building, then projects each opening onto that merged wall as a
+    /// window or door.
+    ///
+    /// Assumptions about the input <see cref="Chain"/>:
+    /// - <c>chain.Direction</c> is the chain's long axis, taken from an opening's
+    ///   <see cref="Rect.Direction2D"/> — reliable because openings always have
+    ///   length &gt; thickness.
+    /// - Every opening in the chain has 2 flanking walls already in the chain.
+    /// - Walls and openings sit on the same row (same perpendicular position),
+    ///   so averaging the perpendicular coordinate of all vertices yields the
+    ///   row's centerline offset.
+    /// - The row's wall thickness comes from the openings, not the walls,
+    ///   because a "stub" wall (length &lt; thickness) may sit between two
+    ///   openings and its <see cref="Rect.Thickness2D"/> would be its tiny side,
+    ///   not the architectural wall thickness. Openings are always normal
+    ///   (length &gt; thickness) so their <see cref="Rect.Thickness2D"/> is reliable.
     /// </summary>
     public static class ChainWallFactory
     {
-        /// <summary>
-        /// Axis-aligned bounds of a chain, computed in the chain's local (dir, perp) frame.
-        /// </summary>
-        private readonly struct ChainBounds(double minT, double maxT, double avgPerp, double avgWallThickness, Vec2 perp)
+        private readonly struct ChainBounds(double minT, double maxT, double avgPerp, double rowThickness, Vec2 perp)
         {
             public double MinT { get; } = minT;
             public double MaxT { get; } = maxT;
             public double AvgPerp { get; } = avgPerp;
-            public double AvgWallThickness { get; } = avgWallThickness;
+            public double RowThickness { get; } = rowThickness;
             public Vec2 Perp { get; } = perp;
         }
 
         /// <summary>
-        /// Merges all walls + openings in a single chain into one <see cref="Wall"/> on the
-        /// <paramref name="building"/> and attaches each opening as a window or door.
-        ///
-        /// Pipeline:
-        /// 1. <see cref="ComputeBounds"/> — projects every vertex onto the chain's (dir, perp)
-        ///    frame to get start/end along the chain and an average perpendicular offset.
-        /// 2. <see cref="CreateMergedWall"/> — converts those bounds back to world 2D and
-        ///    creates one wall spanning the whole chain.
-        /// 3. For each opening in the chain, <see cref="TryAddOpening"/> projects it onto
-        ///    the same frame and registers it on the merged wall.
+        /// Merges <paramref name="chain"/> into one wall and adds each of its openings.
+        /// Increments <c>result.WallsCreated</c> once and the matching opening counter
+        /// (<c>WindowsCreated</c> / <c>DoorsCreated</c> / <c>OpeningsSkipped</c>) per opening.
         /// </summary>
-        /// <param name="building">The building that will own the new wall and openings.</param>
-        /// <param name="chain">The chain of alternating wall/opening rectangles to merge.</param>
-        /// <param name="botElevation">Bottom elevation (Z) of the merged wall.</param>
-        /// <param name="topElevation">Top elevation (Z) of the merged wall.</param>
-        /// <param name="result">Counters updated in-place: WallsCreated, WindowsCreated,
-        /// DoorsCreated, OpeningsSkipped.</param>
-        public static void Create(Building building, Chain chain, double botElevation, double topElevation, FloorPlanResult result)
+        public static void Create(Building building, Chain chain, Story story, FloorPlanResult result)
         {
             var bounds = ComputeBounds(chain, building.Units.DefaultWallThickness);
-            var wall = CreateMergedWall(building, chain.Direction, bounds, botElevation, topElevation);
+            var wall = CreateMergedWall(building, chain.Direction, bounds, story);
             result.WallsCreated++;
 
-            foreach (var entry in chain.Elements)
-            {
-                if (!entry.IsOpening) continue;
-                TryAddOpening(building, wall, entry.Element, chain.Direction, bounds, botElevation, result);
-            }
+            double botElevation = story.BotLevel.Elevation;
+            foreach (var opening in chain.Openings)
+                TryAddOpening(building, wall, opening, chain.Direction, bounds, botElevation, result);
         }
 
         /// <summary>
-        /// Returns the sill Z (bottom of the opening) and vertical height for a given
-        /// opening type, pulled from the building's <see cref="UnitSystem"/>. A 2D
-        /// floor plan carries no vertical information for openings, so these come
-        /// from unit-system defaults, not from the polyline.
-        /// </summary>
-        private static (double sillZ, double height) ResolveOpeningZAndHeight(
-            Building building, ElementType type, double botElevation)
-        {
-            var units = building.Units;
-            return type switch
-            {
-                ElementType.Window => (botElevation + units.DefaultWindowSillHeight, units.DefaultWindowHeight),
-                ElementType.Door   => (botElevation + units.DefaultDoorSillHeight,   units.DefaultDoorHeight),
-                _ => (botElevation, 0),
-            };
-        }
-
-        /// <summary>
-        /// Projects every vertex of every element in the chain onto the chain's axis,
-        /// computing min/max along the axis and an average perpendicular offset. Also
-        /// averages per-wall thicknesses (or falls back to the unit system default).
+        /// Projects every vertex of every chain element onto the chain's (dir, perp)
+        /// frame and returns:
+        /// - <c>MinT</c>/<c>MaxT</c>: span along the chain (the merged wall's endpoints).
+        /// - <c>AvgPerp</c>: average perpendicular coordinate (the merged wall's row offset).
+        /// - <c>RowThickness</c>: average <see cref="Rect.Thickness2D"/> of the openings.
+        ///   Falls back to walls' Thickness2D only if the chain has no openings (which
+        ///   <see cref="ChainBuilding.ChainBuilder"/> never produces), and finally to
+        ///   <paramref name="defaultWallThickness"/>.
         /// </summary>
         private static ChainBounds ComputeBounds(Chain chain, double defaultWallThickness)
         {
@@ -85,67 +69,55 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Converter.WallCreation
             double minT = double.MaxValue, maxT = double.MinValue;
             double perpSum = 0;
             int vertexCount = 0;
-            double totalThickness = 0;
-            int wallCount = 0;
 
-            foreach (var entry in chain.Elements)
+            foreach (var elem in chain.Walls.Concat(chain.Openings))
             {
-                var rect = entry.Element.Rect;
-                foreach (var p in rect.Points)
+                foreach (var p in elem.Rect.Points)
                 {
-                    var v = new Vec2(p.X, p.Y);
-                    double t = Vec2Math.Dot(v, dir);
-                    perpSum += Vec2Math.Dot(v, perp);
+                    double t = p.X * dir.X + p.Y * dir.Y;
+                    perpSum += p.X * perp.X + p.Y * perp.Y;
                     vertexCount++;
-
                     if (t < minT) minT = t;
                     if (t > maxT) maxT = t;
                 }
-
-                if (!entry.IsOpening)
-                {
-                    // Use the wall's extent along the chain perp axis (rather than its own
-                    // Thickness2D) so small misalignments between wall and chain are absorbed.
-                    totalThickness += rect.Extent2D(perp);
-                    wallCount++;
-                }
             }
 
-            double avgPerp = perpSum / vertexCount;
-            double thickness = wallCount > 0 ? totalThickness / wallCount : defaultWallThickness;
+            double avgPerp = vertexCount > 0 ? perpSum / vertexCount : 0;
 
-            return new ChainBounds(minT, maxT, avgPerp, thickness, perp);
+            double rowThickness;
+            if (chain.Openings.Count > 0)
+                rowThickness = chain.Openings.Average(o => o.Rect.Thickness2D);
+            else if (chain.Walls.Count > 0)
+                rowThickness = chain.Walls.Average(w => w.Rect.Thickness2D);
+            else
+                rowThickness = defaultWallThickness;
+
+            return new ChainBounds(minT, maxT, avgPerp, rowThickness, perp);
         }
 
         /// <summary>
-        /// Converts chain bounds back into 2D endpoints and adds the merged wall to the building.
+        /// Builds the merged wall's two endpoints from the chain's (MinT, MaxT) span and
+        /// (AvgPerp) row offset, then adds the wall to the building under <paramref name="story"/>.
         /// </summary>
-        private static Wall CreateMergedWall(Building building, Vec2 dir, ChainBounds bounds,
-            double botElevation, double topElevation)
+        private static Wall CreateMergedWall(Building building, Vec2 dir, ChainBounds bounds, Story story)
         {
             var start = AxisFrameToWorld(bounds.MinT, bounds.AvgPerp, dir, bounds.Perp);
             var end = AxisFrameToWorld(bounds.MaxT, bounds.AvgPerp, dir, bounds.Perp);
-
-            return building.AddWall(start.X, start.Y, end.X, end.Y,
-                botElevation, topElevation, bounds.AvgWallThickness);
+            return building.AddWall(start.X, start.Y, end.X, end.Y, story, bounds.RowThickness);
         }
 
         /// <summary>
-        /// Projects one opening element onto the chain axis to get its 2D endpoints,
-        /// resolves its vertical (sill Z + height) from the building's <see cref="UnitSystem"/>,
-        /// and adds it to <paramref name="wall"/> as a window or door.
-        /// Increments the corresponding counter on <paramref name="result"/>.
-        ///
-        /// Note: the rectangle's width comes from the floor plan, but its height and
-        /// sill elevation come from the unit system — a 2D floor plan carries no
-        /// vertical information for openings.
+        /// Projects one opening rectangle onto the chain frame to get its 2D endpoints,
+        /// resolves its sill Z and height from the unit system (a 2D floor plan carries
+        /// no vertical info), and adds it to <paramref name="wall"/>. Counts on
+        /// <paramref name="result"/> are updated. Failures are caught and counted as
+        /// <c>OpeningsSkipped</c>.
         /// </summary>
         private static void TryAddOpening(Building building, Wall wall, TaggedRect element,
             Vec2 dir, ChainBounds bounds, double botElevation, FloorPlanResult result)
         {
-            var rect = element.Rect;
             double minT = double.MaxValue, maxT = double.MinValue;
-            foreach (var p in rect.Points)
+            foreach (var p in element.Rect.Points)
             {
                 double t = p.X * dir.X + p.Y * dir.Y;
                 if (t < minT) minT = t;
@@ -162,13 +134,11 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Converter.WallCreation
                 switch (element.Type)
                 {
                     case ElementType.Window:
-                        building.AddWindow(wall, openStart.X, openStart.Y, openEnd.X, openEnd.Y,
-                            sillZ, height);
+                        building.AddWindow(wall, openStart.X, openStart.Y, openEnd.X, openEnd.Y, sillZ, height);
                         result.WindowsCreated++;
                         break;
                     case ElementType.Door:
-                        building.AddDoor(wall, openStart.X, openStart.Y, openEnd.X, openEnd.Y,
-                            sillZ, height);
+                        building.AddDoor(wall, openStart.X, openStart.Y, openEnd.X, openEnd.Y, sillZ, height);
                         result.DoorsCreated++;
                         break;
                 }
@@ -180,7 +150,24 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Converter.WallCreation
         }
 
         /// <summary>
-        /// Converts a point expressed in the (dir, perp) frame back into world 2D coordinates.
+        /// Pulls the sill height and total opening height from the building's
+        /// <see cref="UnitSystem"/> defaults for the given opening type. Floor plans
+        /// don't carry vertical information, so these always come from defaults.
+        /// </summary>
+        private static (double sillZ, double height) ResolveOpeningZAndHeight(
+            Building building, ElementType type, double botElevation)
+        {
+            var units = building.Units;
+            return type switch
+            {
+                ElementType.Window => (botElevation + units.DefaultWindowSillHeight, units.DefaultWindowHeight),
+                ElementType.Door   => (botElevation + units.DefaultDoorSillHeight,   units.DefaultDoorHeight),
+                _ => (botElevation, 0),
+            };
+        }
+
+        /// <summary>
+        /// Converts a point expressed in the (dir, perp) chain frame back into world 2D.
         /// </summary>
         private static Vec2 AxisFrameToWorld(double t, double p, Vec2 dir, Vec2 perp)
             => new(t * dir.X + p * perp.X, t * dir.Y + p * perp.Y);

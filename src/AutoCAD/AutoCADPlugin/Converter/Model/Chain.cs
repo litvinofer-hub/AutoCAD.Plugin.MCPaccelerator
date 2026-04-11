@@ -4,23 +4,29 @@ using MCPAccelerator.Utils.GeometryModel;
 namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Converter.Model
 {
     /// <summary>
-    /// A single entry in a chain: the tagged rectangle, its original index in its
-    /// source list, and whether it's an opening (window/door) or a wall.
+    /// A connected component of walls + openings that will be merged into one
+    /// <see cref="MCPAccelerator.Domain.BuildingModel.Wall"/> with its openings.
+    /// Built by <c>ChainBuilder.Build</c>; consumed by <c>ChainWallFactory.Create</c>.
+    ///
+    /// Layout:
+    /// - <see cref="Direction"/> is the chain's long axis (taken from one of the
+    ///   openings, since openings always have length &gt; thickness so their
+    ///   <see cref="Rect.Direction2D"/> is reliable).
+    /// - <see cref="Walls"/> and <see cref="Openings"/> are both sorted along
+    ///   <see cref="Direction"/>.
+    /// - <see cref="WallIndices"/> are the original positions of the walls in the
+    ///   list passed to ChainBuilder, so the converter's standalone-wall pass can
+    ///   skip walls already consumed by a chain.
     /// </summary>
-    public readonly struct ChainEntry(TaggedRect element, int originalIndex, bool isOpening)
+    public class Chain(
+        Vec2 direction,
+        List<TaggedRect> walls,
+        List<TaggedRect> openings,
+        List<int> wallIndices)
     {
-        public TaggedRect Element { get; } = element;
-        public int OriginalIndex { get; } = originalIndex;
-        public bool IsOpening { get; } = isOpening;
-    }
-
-    /// <summary>
-    /// A straight-line alternating sequence of walls and openings along a single axis.
-    /// Always starts and ends with a wall (when fully built).
-    /// </summary>
-    public class Chain
-    {
-        public Vec2 Direction { get; set; }
-        public List<ChainEntry> Elements { get; set; } = new();
+        public Vec2 Direction { get; } = direction;
+        public List<TaggedRect> Walls { get; } = walls;
+        public List<TaggedRect> Openings { get; } = openings;
+        public List<int> WallIndices { get; } = wallIndices;
     }
 }

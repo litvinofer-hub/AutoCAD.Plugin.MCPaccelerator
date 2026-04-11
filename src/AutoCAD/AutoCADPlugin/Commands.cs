@@ -20,6 +20,9 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin
         [CommandMethod("OL_SELECT_FLOOR_PLAN")]
         public static void SelectFloorPlan() => new SelectFloorPlanWorkflow().Run();
 
+        [CommandMethod("OL_PRINT_BUILDING")]
+        public static void PrintBuilding() => new PrintBuildingWorkflow().Run();
+
         [CommandMethod("OL_DELETE_BUILDING")]
         public static void DeleteBuilding() => new DeleteBuildingWorkflow().Run();
 

@@ -142,6 +142,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         public void AddWall_CreatesWallWithSharedPointsAndLevels()
         {
             var building = new Building();
+            building.AddStory(0, 3.0);
 
             var wall = building.AddWall(0, 0, 5, 0,
                 botElevation: 0, topElevation: 3.0, thickness: 0.2);
@@ -154,6 +155,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         public void AddWall_SharesPointsWithRoom()
         {
             var building = new Building();
+            building.AddStory(0, 3.0);
 
             var room = building.AddRoom(
                 new[] { (0.0, 0.0), (5.0, 0.0), (5.0, 5.0), (0.0, 5.0) },
@@ -184,10 +186,10 @@ namespace MCPAccelerator.Tests.BuildingModel
         public void AddStory_SharesLevelsWithWall()
         {
             var building = new Building();
+            var story = building.AddStory(0, 3.0);
 
             var wall = building.AddWall(0, 0, 5, 0,
                 botElevation: 0, topElevation: 3.0, thickness: 0.2);
-            var story = building.AddStory(0, 3.0);
 
             Assert.Same(wall.BotLevel, story.BotLevel);
             Assert.Same(wall.TopLevel, story.TopLevel);
@@ -200,6 +202,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         public void Wall_AddWindow_UsesSharedPoints()
         {
             var building = new Building();
+            building.AddStory(0, 3.0);
             var wall = building.AddWall(0, 0, 10, 0,
                 botElevation: 0, topElevation: 3.0, thickness: 0.2);
 
@@ -213,6 +216,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         public void Wall_AddDoor_UsesSharedPoints()
         {
             var building = new Building();
+            building.AddStory(0, 3.0);
             var wall = building.AddWall(0, 0, 10, 0,
                 botElevation: 0, topElevation: 3.0, thickness: 0.2);
 
@@ -226,6 +230,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         public void Wall_AddDoor_SharesPointsWithWall()
         {
             var building = new Building();
+            building.AddStory(0, 3.0);
             var wall = building.AddWall(0, 0, 10, 0,
                 botElevation: 0, topElevation: 3.0, thickness: 0.2);
 
@@ -241,6 +246,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         public void RemoveWall_RemovesFromList()
         {
             var building = new Building();
+            building.AddStory(0, 3.0);
             var wall = building.AddWall(0, 0, 5, 0,
                 botElevation: 0, topElevation: 3.0, thickness: 0.2);
 
@@ -282,12 +288,15 @@ namespace MCPAccelerator.Tests.BuildingModel
         public void RemoveWall_CleansUpUnusedLevels()
         {
             var building = new Building();
+            building.AddStory(0, 3.0);
+            var upperStory = building.AddStory(6.0, 9.0);
             building.AddWall(0, 0, 5, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
             var wall2 = building.AddWall(10, 0, 15, 0, botElevation: 6.0, topElevation: 9.0, thickness: 0.2);
 
             Assert.Equal(4, building.Levels.Count);
 
             building.RemoveWall(wall2);
+            building.RemoveStory(upperStory);
 
             // Only elevations 0 and 3 remain (from wall1)
             Assert.Equal(2, building.Levels.Count);
@@ -297,6 +306,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         public void RemoveWall_KeepsSharedLevels()
         {
             var building = new Building();
+            building.AddStory(0, 3.0);
             var wall = building.AddWall(0, 0, 5, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
             building.AddRoom(
                 new[] { (10.0, 0.0), (15.0, 0.0), (15.0, 5.0) },
@@ -312,6 +322,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         public void RemoveWall_CleansUpUnusedPoints()
         {
             var building = new Building();
+            building.AddStory(0, 3.0);
             var wall = building.AddWall(0, 0, 5, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
             building.AddWall(10, 0, 15, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
 
@@ -329,6 +340,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         public void RemoveAll_ClearsEverything()
         {
             var building = new Building();
+            var story = building.AddStory(0, 3.0);
             var wall = building.AddWall(0, 0, 5, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
             var room = building.AddRoom(
                 new[] { (10.0, 0.0), (15.0, 0.0), (15.0, 5.0) },
@@ -336,6 +348,7 @@ namespace MCPAccelerator.Tests.BuildingModel
 
             building.RemoveWall(wall);
             building.RemoveRoom(room);
+            building.RemoveStory(story);
 
             Assert.Empty(building.Levels);
             Assert.Empty(building.GetPoints());
@@ -347,6 +360,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         public void FullBuilding_AllSharedReferences_NoValueDuplicates()
         {
             var building = new Building();
+            building.AddStory(0, 3.0);
 
             // Room and wall share corners at (0,0) and (5,0)
             var room = building.AddRoom(
@@ -355,7 +369,6 @@ namespace MCPAccelerator.Tests.BuildingModel
             var wall = building.AddWall(0, 0, 5, 0,
                 botElevation: 0, topElevation: 3.0, thickness: 0.2);
             building.AddWindow(wall, 1, 0, 2, 0, z: 0, height: 2.0);
-            building.AddStory(0, 3.0);
 
             // Shared levels
             Assert.Equal(2, building.Levels.Count);

@@ -13,22 +13,28 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Converter
     /// <summary>
     /// Converts AutoCAD floor-plan polylines (walls, windows, doors) into BuildingModel objects.
     ///
-    /// In a 2D floor plan, openings (windows/doors) sit between wall polylines forming straight chains:
-    ///   [wall] [opening] [wall] [opening] [wall]
-    ///
-    /// Rules:
-    /// - Openings always have length &gt; thickness, so their long axis is reliable.
-    /// - Wall polylines near openings can be very short (thickness &gt; length), so their
-    ///   long axis is NOT reliable. We use the adjacent opening's direction instead.
-    /// - Openings always alternate with walls (never two openings in a row).
-    /// - Chains are always straight lines.
-    /// - A chain always starts and ends with a wall.
+    /// In a 2D floor plan, openings (windows/doors) sit between two wall polylines on the
+    /// same row. We turn that row into one merged wall with the openings inside it.
     ///
     /// Pipeline:
-    /// 1. <see cref="ToTaggedRects"/>          — convert AutoCAD polylines into pure <see cref="Rect"/>s tagged with their role.
-    /// 2. <see cref="ChainBuilder"/>           — grow chains from each opening using <see cref="Adjacency"/>.
-    /// 3. <see cref="ChainWallFactory"/>       — merge each chain into one wall with its openings.
-    /// 4. <see cref="StandaloneWallFactory"/>  — create a wall for every rectangle no chain consumed.
+    /// 1. <see cref="ToTaggedRects"/>         — flatten each AutoCAD polyline into a pure
+    ///    <see cref="Rect"/> tagged with its floor-plan role. Layer-name classification
+    ///    happens earlier (in SelectFloorPlanWorkflow); inputs arrive already split into
+    ///    walls / windows / doors.
+    /// 2. <see cref="ChainBuilder"/>          — for each opening, find its 2 flanking walls
+    ///    and group walls connected through shared openings into chains.
+    /// 3. <see cref="ChainWallFactory"/>      — merge each chain into one wall with its openings.
+    /// 4. <see cref="StandaloneWallFactory"/> — create a plain wall for every wall rect that
+    ///    wasn't consumed by a chain (i.e. has no adjacent opening).
+    ///
+    /// Assumptions:
+    /// - Openings always have length &gt; thickness, so their <see cref="Rect.Direction2D"/>
+    ///   reliably points along the chain.
+    /// - A wall and an opening that belong to the same chain touch at the opening's end —
+    ///   their nearest vertices are within <see cref="UnitSystem.LengthEpsilon"/>.
+    /// - Short "stub" walls (length &lt; thickness) only appear next to openings; they are
+    ///   handled identically to normal walls because the chain builder never reads a wall's
+    ///   own direction.
     ///
     /// All pure geometry lives in <see cref="Rect"/> (and its base <see cref="Polyline"/>),
     /// so future projects can reuse the same geometry without depending on AutoCAD.
@@ -42,26 +48,26 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Converter
             List<AcadPolyline> windowPolylines,
             List<AcadPolyline> doorPolylines)
         {
-            double botElevation = story.BotLevel.Elevation;
-            double topElevation = story.TopLevel.Elevation;
-
             var walls = ToTaggedRects(wallPolylines, ElementType.Wall);
             var openings = ToTaggedRects(windowPolylines, ElementType.Window)
                 .Concat(ToTaggedRects(doorPolylines, ElementType.Door))
                 .ToList();
 
-            var builder = new ChainBuilder(walls, openings, building.Units.LengthEpsilon);
-            var chains = builder.BuildAll();
+            var chains = ChainBuilder.Build(walls, openings, building.Units.LengthEpsilon);
 
             var result = new FloorPlanResult();
-
+            var usedWalls = new HashSet<int>();
             foreach (var chain in chains)
-                ChainWallFactory.Create(building, chain, botElevation, topElevation, result);
+            {
+                ChainWallFactory.Create(building, chain, story, result);
+                foreach (var idx in chain.WallIndices)
+                    usedWalls.Add(idx);
+            }
 
             for (int i = 0; i < walls.Count; i++)
             {
-                if (builder.UsedWalls.Contains(i)) continue;
-                StandaloneWallFactory.Create(building, walls[i], botElevation, topElevation, result);
+                if (usedWalls.Contains(i)) continue;
+                StandaloneWallFactory.Create(building, walls[i], story, result);
             }
 
             return result;

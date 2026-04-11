@@ -15,6 +15,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         public void Constructor_LineZMatchesLevel_Succeeds()
         {
             var building = new Building();
+            building.AddStory(5.0, 8.0);
             var wall = building.AddWall(0, 0, 5, 0, botElevation: 5.0, topElevation: 8.0, thickness: 0.2);
 
             Assert.NotNull(wall);
@@ -33,7 +34,7 @@ namespace MCPAccelerator.Tests.BuildingModel
             var line = new LineSegment(new Point(0, 0, 0), new Point(5, 0, 3.0));
 
             Assert.Throws<ArgumentException>(() =>
-                new Wall(building.Id, line, 0.2, top, building.Levels));
+                new Wall(building.Id, line, 0.2, top, building.Levels, Guid.NewGuid()));
         }
 
         [Fact]
@@ -46,13 +47,58 @@ namespace MCPAccelerator.Tests.BuildingModel
             var line = new LineSegment(new Point(0, 0, 3.0), new Point(5, 0, 3.0));
 
             Assert.Throws<ArgumentException>(() =>
-                new Wall(building.Id, line, 0.2, top, building.Levels));
+                new Wall(building.Id, line, 0.2, top, building.Levels, Guid.NewGuid()));
+        }
+
+        [Fact]
+        public void Constructor_EmptyStoryId_ThrowsArgumentException()
+        {
+            var building = new Building();
+            building.GetOrAddLevel(0);
+            var top = building.GetOrAddLevel(3.0);
+            var line = new LineSegment(new Point(0, 0, 0), new Point(5, 0, 0));
+
+            Assert.Throws<ArgumentException>(() =>
+                new Wall(building.Id, line, 0.2, top, building.Levels, Guid.Empty));
+        }
+
+        [Fact]
+        public void AddWall_AttachesMatchingStoryId()
+        {
+            var building = new Building();
+            var story = building.AddStory(0, 3.0);
+            var wall = building.AddWall(0, 0, 5, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
+
+            Assert.Equal(story.Id, wall.StoryId);
+        }
+
+        [Fact]
+        public void AddWall_NoMatchingStory_ThrowsArgumentException()
+        {
+            var building = new Building();
+            // no stories added
+
+            Assert.Throws<ArgumentException>(() =>
+                building.AddWall(0, 0, 5, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2));
+        }
+
+        [Fact]
+        public void AddWall_WallAtTopOfStory_BelongsToUpperStory()
+        {
+            var building = new Building();
+            building.AddStory(0, 3.0);
+            var upper = building.AddStory(3.0, 6.0);
+
+            var wall = building.AddWall(0, 0, 5, 0, botElevation: 3.0, topElevation: 6.0, thickness: 0.2);
+
+            Assert.Equal(upper.Id, wall.StoryId);
         }
 
         [Fact]
         public void Constructor_BotLevelDerivedFromLineZ()
         {
             var building = new Building();
+            building.AddStory(3.0, 6.0);
             var wall = building.AddWall(0, 0, 5, 0, botElevation: 3.0, topElevation: 6.0, thickness: 0.2);
 
             Assert.Equal(3.0, wall.BotLevel.Elevation);
@@ -65,6 +111,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         public void AddWindow_ValidOpening_AddsToList()
         {
             var building = new Building();
+            building.AddStory(0, 3.0);
             var wall = building.AddWall(0, 0, 5, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
 
             var window = building.AddWindow(wall, 1, 0, 2, 0, z: 0, height: 2.0);
@@ -77,6 +124,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         public void AddWindow_OpeningLineOutsideWall_ThrowsArgumentException()
         {
             var building = new Building();
+            building.AddStory(0, 3.0);
             var wall = building.AddWall(0, 0, 5, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
 
             Assert.Throws<ArgumentException>(() =>
@@ -87,6 +135,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         public void AddWindow_HeightExceedsWall_ThrowsArgumentException()
         {
             var building = new Building();
+            building.AddStory(0, 3.0);
             var wall = building.AddWall(0, 0, 5, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
 
             Assert.Throws<ArgumentException>(() =>
@@ -97,6 +146,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         public void AddWindow_OpeningZAboveBotLevel_Succeeds()
         {
             var building = new Building();
+            building.AddStory(0, 3.0);
             var wall = building.AddWall(0, 0, 5, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
 
             building.AddWindow(wall, 1, 0, 2, 0, z: 1.0, height: 1.5);
@@ -108,6 +158,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         public void AddWindow_OpeningZPlusHeightExceedsTop_ThrowsArgumentException()
         {
             var building = new Building();
+            building.AddStory(0, 3.0);
             var wall = building.AddWall(0, 0, 5, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
 
             Assert.Throws<ArgumentException>(() =>
@@ -118,6 +169,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         public void AddWindow_OpeningZBelowBotLevel_ThrowsArgumentException()
         {
             var building = new Building();
+            building.AddStory(3.0, 6.0);
             var wall = building.AddWall(0, 0, 5, 0, botElevation: 3.0, topElevation: 6.0, thickness: 0.2);
 
             Assert.Throws<ArgumentException>(() =>
@@ -128,6 +180,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         public void AddWindow_OpeningZNotHorizontal_ThrowsArgumentException()
         {
             var building = new Building();
+            building.AddStory(0, 3.0);
             var wall = building.AddWall(0, 0, 5, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
 
             // Start and end at different Z — pass different z values through two separate walls
@@ -142,6 +195,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         public void AddDoor_HeightEqualsWallHeight_Succeeds()
         {
             var building = new Building();
+            building.AddStory(0, 3.0);
             var wall = building.AddWall(0, 0, 5, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
 
             building.AddDoor(wall, 1, 0, 2, 0, z: 0, height: 3.0);
@@ -155,6 +209,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         public void RemoveOpening_ExistingOpening_RemovesAndReturnsTrue()
         {
             var building = new Building();
+            building.AddStory(0, 3.0);
             var wall = building.AddWall(0, 0, 5, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
             var window = building.AddWindow(wall, 1, 0, 2, 0, z: 0, height: 2.0);
 
@@ -170,6 +225,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         public void AddDoor_SharesPointsWithWall()
         {
             var building = new Building();
+            building.AddStory(0, 3.0);
             var wall = building.AddWall(0, 0, 10, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
 
             // Door starts at same point as wall start (0,0,0)
@@ -184,6 +240,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         public void AddWindow_OpeningZAboveTopLevel_ThrowsArgumentException()
         {
             var building = new Building();
+            building.AddStory(0, 3.0);
             var wall = building.AddWall(0, 0, 5, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
 
             Assert.Throws<ArgumentException>(() =>
@@ -194,6 +251,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         public void AddWindow_OpeningZEqualsTopLevel_Succeeds()
         {
             var building = new Building();
+            building.AddStory(0, 3.0);
             var wall = building.AddWall(0, 0, 5, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
 
             building.AddWindow(wall, 1, 0, 2, 0, z: 3.0, height: 0);
@@ -205,6 +263,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         public void AddWindow_OpeningHeightEqualsBotLevel_Succeeds()
         {
             var building = new Building();
+            building.AddStory(0, 3.0);
             var wall = building.AddWall(0, 0, 5, 0, botElevation: 0, topElevation: 3.0, thickness: 0.2);
 
             building.AddWindow(wall, 1, 0, 2, 0, z: 0, height: 0);
@@ -216,6 +275,7 @@ namespace MCPAccelerator.Tests.BuildingModel
         public void AddDoor_OpeningTopBelowBotLevel_ThrowsArgumentException()
         {
             var building = new Building();
+            building.AddStory(3.0, 6.0);
             var wall = building.AddWall(0, 0, 5, 0, botElevation: 3.0, topElevation: 6.0, thickness: 0.2);
 
             Assert.Throws<ArgumentException>(() =>

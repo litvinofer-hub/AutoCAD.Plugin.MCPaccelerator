@@ -46,6 +46,25 @@ namespace MCPAccelerator.Utils.GeometryModel
             return GeometrySettings.AreEqual(dStartToPoint + dPointToEnd, dTotal);
         }
 
-        
+        /// <summary>
+        /// Inflates this segment into a 2D rectangle of the given <paramref name="thickness"/>,
+        /// centered on the segment. All four corners are returned at Z = 0 — this is a pure
+        /// floor-plan (2D) helper; any Z on the source points is dropped.
+        /// </summary>
+        public Rect ToRect(double thickness)
+        {
+            var s = new Vec2(StartPoint.X, StartPoint.Y);
+            var e = new Vec2(EndPoint.X, EndPoint.Y);
+            var dir = Vec2Math.Normalize(Vec2Math.Subtract(e, s));
+            var perp = Vec2Math.Perpendicular(dir);
+            double half = thickness / 2.0;
+
+            var p0 = new Point(s.X + perp.X * half, s.Y + perp.Y * half, 0);
+            var p1 = new Point(e.X + perp.X * half, e.Y + perp.Y * half, 0);
+            var p2 = new Point(e.X - perp.X * half, e.Y - perp.Y * half, 0);
+            var p3 = new Point(s.X - perp.X * half, s.Y - perp.Y * half, 0);
+
+            return new Rect([p0, p1, p2, p3]);
+        }
     }
 }

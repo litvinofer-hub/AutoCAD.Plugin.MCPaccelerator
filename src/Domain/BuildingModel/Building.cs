@@ -77,19 +77,67 @@ namespace MCPAccelerator.Domain.BuildingModel
             return room;
         }
 
+        /// <summary>
+        /// Creates a wall at the given elevation. Looks up the <see cref="Story"/>
+        /// whose [BotLevel, TopLevel) range contains <paramref name="botElevation"/>
+        /// and attaches it to the wall. Throws if no story matches — a wall cannot
+        /// exist without a story.
+        /// </summary>
         public Wall AddWall(double x1, double y1, double x2, double y2,
             double botElevation, double topElevation, double thickness)
         {
             Level bot = GetOrAddLevel(botElevation);
             Level top = GetOrAddLevel(topElevation);
 
+            Story story = FindStoryFor(bot.Elevation)
+                ?? throw new ArgumentException(
+                    $"Cannot create wall at bottom elevation {bot.Elevation}: no story contains this elevation. Add a story first.");
+
+            return CreateWall(x1, y1, x2, y2, bot, top, thickness, story);
+        }
+
+        /// <summary>
+        /// Creates a wall on the given <paramref name="story"/> directly. Use this
+        /// overload when the caller already knows the story (e.g. importing a floor
+        /// plan the user explicitly assigned to a story) — it skips the elevation
+        /// lookup.
+        /// </summary>
+        public Wall AddWall(double x1, double y1, double x2, double y2,
+            Story story, double thickness)
+        {
+            if (story == null) throw new ArgumentNullException(nameof(story));
+            if (!_stories.Contains(story))
+                throw new ArgumentException("Story does not belong to this building.", nameof(story));
+
+            return CreateWall(x1, y1, x2, y2, story.BotLevel, story.TopLevel, thickness, story);
+        }
+
+        private Wall CreateWall(double x1, double y1, double x2, double y2,
+            Level bot, Level top, double thickness, Story story)
+        {
             Point start = GetOrAddPoint(x1, y1, bot.Elevation);
             Point end = GetOrAddPoint(x2, y2, bot.Elevation);
 
             var botLine = new LineSegment(start, end);
-            var wall = new Wall(this.Id, botLine, thickness, top, Levels);
+            var wall = new Wall(this.Id, botLine, thickness, top, Levels, story.Id);
             _walls.Add(wall);
             return wall;
+        }
+
+        /// <summary>
+        /// Returns the story whose [BotLevel, TopLevel) elevation range contains
+        /// <paramref name="elevation"/>, or null when no story matches. The lower
+        /// bound is tolerant so walls exactly at a story's floor still match.
+        /// </summary>
+        private Story FindStoryFor(double elevation)
+        {
+            double tol = GeometrySettings.Tolerance;
+            foreach (var s in _stories)
+            {
+                if (elevation + tol >= s.BotLevel.Elevation && elevation + tol < s.TopLevel.Elevation)
+                    return s;
+            }
+            return null;
         }
 
         /// <summary>
