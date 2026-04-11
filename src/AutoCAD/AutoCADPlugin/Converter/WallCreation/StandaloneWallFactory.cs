@@ -1,34 +1,33 @@
 using MCPAccelerator.AutoCAD.AutoCADPlugin.Converter.Model;
-using MCPAccelerator.Domain.BuildingModel;
 
 namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Converter.WallCreation
 {
     /// <summary>
-    /// Creates walls for rectangles that never joined any chain (no adjacent openings).
-    /// Safe to use the long-axis center line directly here because standalone walls
-    /// are always long enough that length &gt; thickness.
+    /// Creates a <see cref="ConvertedWall"/> for a rectangle that was not consumed
+    /// by any chain (i.e. has no adjacent opening). Pure — no <c>Building</c>
+    /// or <c>Story</c> dependency.
+    ///
+    /// Assumptions:
+    /// - A standalone wall always has length &gt; thickness, so its cached
+    ///   <see cref="MCPAccelerator.Utils.GeometryModel.Rect.CenterLineStart2D"/> /
+    ///   <see cref="MCPAccelerator.Utils.GeometryModel.Rect.CenterLineEnd2D"/> /
+    ///   <see cref="MCPAccelerator.Utils.GeometryModel.Rect.Thickness2D"/> are
+    ///   reliable. Short "stub" walls never reach this path because they always
+    ///   flank an opening and therefore belong to a chain.
     /// </summary>
     public static class StandaloneWallFactory
     {
         /// <summary>
-        /// Reads the cached center line and thickness of a standalone wall <see cref="Rect"/>
-        /// (<see cref="Rect.CenterLineStart2D"/>, <see cref="Rect.CenterLineEnd2D"/>,
-        /// <see cref="Rect.Thickness2D"/>) and adds one <see cref="Wall"/> to the
-        /// <paramref name="building"/>. Increments <c>result.WallsCreated</c>.
+        /// Returns a <see cref="ConvertedWall"/> from the rectangle's cached center
+        /// line and thickness. The resulting wall has no openings.
         /// </summary>
-        /// <param name="building">The building that will own the new wall.</param>
-        /// <param name="element">The tagged wall rectangle (tag is ignored here — only walls reach this path).</param>
-        /// <param name="story">The story this wall belongs to (chosen by the user).</param>
-        /// <param name="result">Counters updated in-place: <c>WallsCreated</c>.</param>
-        public static void Create(Building building, TaggedRect element,
-            Story story, FloorPlanResult result)
+        public static ConvertedWall Create(TaggedRect element)
         {
             var rect = element.Rect;
-            building.AddWall(
+            return new ConvertedWall(
                 rect.CenterLineStart2D.X, rect.CenterLineStart2D.Y,
                 rect.CenterLineEnd2D.X, rect.CenterLineEnd2D.Y,
-                story, rect.Thickness2D);
-            result.WallsCreated++;
+                rect.Thickness2D);
         }
     }
 }

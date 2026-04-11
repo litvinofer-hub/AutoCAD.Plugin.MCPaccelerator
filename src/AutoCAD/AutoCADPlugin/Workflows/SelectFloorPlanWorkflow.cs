@@ -33,11 +33,16 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                 return;
             }
 
-            var result = FloorPlanConverter.Convert(
-                context.Value.building, context.Value.story,
-                selection.Walls, selection.Windows, selection.Doors);
+            var building = context.Value.building;
+            var story = context.Value.story;
 
-            ReportResult(context.Value.building, context.Value.story, result);
+            var converted = FloorPlanConverter.Convert(
+                selection.Walls, selection.Windows, selection.Doors,
+                building.Units.LengthEpsilon);
+
+            var result = FloorPlanConverter.Apply(building, story, converted);
+
+            ReportResult(building, story, result);
         }
 
         private void ReportResult(Building building, Story story, FloorPlanResult result)
