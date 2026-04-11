@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using MCPAccelerator.Domain.BuildingModel;
 using MCPAccelerator.Utils.GeometryModel;
 using Xunit;
@@ -280,6 +281,91 @@ namespace MCPAccelerator.Tests.BuildingModel
 
             Assert.Throws<ArgumentException>(() =>
                 building.AddDoor(wall, 1, 0, 2, 0, z: 3.0, height: -1.0));
+        }
+
+        // --- SubWalls ---
+        //
+        // The 3 inputs below mirror the 3 FloorPlanConverter inputs. Each test feeds
+        // the *expected* ConvertedWall output of those scenarios into a real Building
+        // and asserts on the rectangles produced by Wall.SubWalls(). Story is 0..120
+        // and openings sit at z=0 with height=80 — those numbers are arbitrary, only
+        // chosen so the openings validate against the wall's elevation range.
+
+        [Fact]
+        public void SubWalls_Input1_StandaloneWallNoOpenings_ReturnsWholeWall()
+        {
+            // From FloorPlanConverter input1: the L-corner leg is a standalone wall
+            // (poly1) with 0 openings → SubWalls returns 1 rect equal to poly1.
+            var building = new Building();
+            building.AddStory(0, 120);
+            var wall = building.AddWall(2.375, 0, 2.375, 22.5, botElevation: 0, topElevation: 120, thickness: 4.75);
+
+            var subs = wall.SubWalls();
+
+            Assert.Single(subs);
+            AssertRectCorners(subs[0], (0, 0), (4.75, 0), (4.75, 22.5), (0, 22.5)); // poly1
+        }
+
+        [Fact]
+        public void SubWalls_Input1_MergedRowWithOneDoor_ReturnsTwoPieces()
+        {
+            // From FloorPlanConverter input1/input2 wall2: horizontal wall
+            // (4.75,20)-(120.355,20) thickness 5, with one door (17,20)-(49,20).
+            // SubWalls returns 2 rects which are exactly poly2 and poly4 from the
+            // original FloorPlanConverter input.
+            var building = new Building();
+            building.AddStory(0, 120);
+            var wall = building.AddWall(4.75, 20, 120.355, 20, botElevation: 0, topElevation: 120, thickness: 5);
+            building.AddDoor(wall, 17, 20, 49, 20, z: 0, height: 80);
+
+            var subs = wall.SubWalls();
+
+            Assert.Equal(2, subs.Count);
+            AssertRectCorners(subs[0], (4.75, 17.5), (17,      17.5), (17,      22.5), (4.75, 22.5)); // poly2
+            AssertRectCorners(subs[1], (49,   17.5), (120.355, 17.5), (120.355, 22.5), (49,   22.5)); // poly4
+        }
+
+        [Fact]
+        public void SubWalls_Input3_MergedRowWithTwoWindows_ReturnsThreePieces()
+        {
+            // From FloorPlanConverter input3: horizontal wall (0,2)-(70,2) thickness 4
+            // with two windows (15,2)-(35,2) and (37,2)-(57,2). SubWalls returns 3
+            // rects which are exactly poly1, poly3 (the stub), and poly5 from the
+            // original FloorPlanConverter input.
+            var building = new Building();
+            building.AddStory(0, 120);
+            var wall = building.AddWall(0, 2, 70, 2, botElevation: 0, topElevation: 120, thickness: 4);
+            building.AddWindow(wall, 15, 2, 35, 2, z: 0, height: 80);
+            building.AddWindow(wall, 37, 2, 57, 2, z: 0, height: 80);
+
+            var subs = wall.SubWalls();
+
+            Assert.Equal(3, subs.Count);
+            AssertRectCorners(subs[0], (0,  0), (15, 0), (15, 4), (0,  4)); // poly1
+            AssertRectCorners(subs[1], (35, 0), (37, 0), (37, 4), (35, 4)); // poly3 (stub)
+            AssertRectCorners(subs[2], (57, 0), (70, 0), (70, 4), (57, 4)); // poly5
+        }
+
+        // Compares a Rect to 4 expected corner points as an unordered set.
+        // Rect.Points is closed (5 entries — first corner duplicated at the end),
+        // so we take the first 4. Comparison is unordered because the rectangle's
+        // winding direction depends on how its segment was built, not on the
+        // semantic identity of the corners.
+        private static void AssertRectCorners(Rect rect, params (double x, double y)[] expectedCorners)
+        {
+            Assert.Equal(4, expectedCorners.Length);
+            const double tol = GeometrySettings.Tolerance;
+
+            var actual = rect.Points.Take(4).Select(p => (p.X, p.Y)).ToList();
+            Assert.Equal(4, actual.Count);
+
+            foreach (var ec in expectedCorners)
+            {
+                Assert.True(
+                    actual.Any(ac => Math.Abs(ac.X - ec.x) < tol && Math.Abs(ac.Y - ec.y) < tol),
+                    $"Expected corner ({ec.x},{ec.y}) not found in actual corners " +
+                    $"[{string.Join(", ", actual.Select(a => $"({a.X},{a.Y})"))}].");
+            }
         }
     }
 }
