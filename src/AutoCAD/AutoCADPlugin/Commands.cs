@@ -28,5 +28,8 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin
 
         [CommandMethod("OL_RESET_SESSION")]
         public static void ResetSession() => new ResetSessionWorkflow().Run();
+
+        [CommandMethod("OL_SHOW_3D")]
+        public static void Show3D() => new Show3DViewWorkflow().Run();
     }
 }
