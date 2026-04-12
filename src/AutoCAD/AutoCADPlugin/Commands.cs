@@ -31,5 +31,11 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin
 
         [CommandMethod("OL_SHOW_3D")]
         public static void Show3D() => new Show3DViewWorkflow().Run();
+
+        [CommandMethod("OL_CLEAR_3D")]
+        public static void Clear3D() => new Clear3DViewWorkflow().Run();
+
+        [CommandMethod("OL_EXPORT_JSON")]
+        public static void ExportJson() => new ExportJsonWorkflow().Run();
     }
 }
