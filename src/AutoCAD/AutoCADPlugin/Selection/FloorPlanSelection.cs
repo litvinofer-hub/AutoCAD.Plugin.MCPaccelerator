@@ -7,7 +7,18 @@ using MCPAccelerator.AutoCAD.AutoCADPlugin.Utils;
 namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Selection
 {
     /// <summary>
-    /// Result of classifying a user selection into wall/window/door polylines by layer name.
+    /// Raw result of user selection — every entity the user picked,
+    /// regardless of type. No filtering has been applied.
+    /// </summary>
+    public class RawSelection
+    {
+        /// <summary>ObjectIds of every entity the user selected.</summary>
+        public List<ObjectId> ObjectIds { get; } = [];
+    }
+
+    /// <summary>
+    /// Result of classifying closed polylines into wall/window/door
+    /// by layer name.
     /// </summary>
     public class ClassifiedPolylines
     {
@@ -19,21 +30,32 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Selection
     }
 
     /// <summary>
-    /// Prompts the user for a selection and classifies each closed polyline
-    /// into walls / windows / doors based on its layer name.
+    /// Three-phase selection helper:
+    /// <list type="number">
+    /// <item><see cref="Select"/> — prompts the user, returns every selected
+    /// entity's ObjectId (any type — lines, polylines, circles, blocks, etc.).
+    /// No filtering at all.</item>
+    /// <item><see cref="FilterClosedPolylines"/> — takes a raw selection and
+    /// returns only the closed polylines.</item>
+    /// <item><see cref="Classify"/> — sorts closed polylines into walls /
+    /// windows / doors by layer name.</item>
+    /// </list>
+    /// Callers control what happens between phases (e.g. persisting the full
+    /// raw ObjectIds to a <see cref="FloorPlanWorkingArea"/> before filtering).
     /// </summary>
     public static class FloorPlanSelection
     {
         /// <summary>
-        /// Returns classified polylines, or null if the user cancelled selection.
+        /// Prompts the user to select floor plan elements. Returns every
+        /// selected entity's ObjectId with no filtering. Returns null on cancel.
         /// </summary>
-        public static ClassifiedPolylines SelectAndClassify()
+        public static RawSelection Select()
         {
             var editor = AcadContext.Editor;
 
             var options = new PromptSelectionOptions
             {
-                MessageForAdding = "\nSelect floor plan elements (walls, windows, doors), then press Enter: "
+                MessageForAdding = "\nSelect floor plan elements, then press Enter: "
             };
 
             var selectionResult = editor.GetSelection(options);
@@ -43,36 +65,60 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Selection
                 return null;
             }
 
-            var result = new ClassifiedPolylines();
+            var raw = new RawSelection();
+            foreach (ObjectId objectId in selectionResult.Value.GetObjectIds())
+                raw.ObjectIds.Add(objectId);
+
+            return raw;
+        }
+
+        /// <summary>
+        /// Filters a raw selection down to closed polylines only.
+        /// All other entity types are silently skipped.
+        /// </summary>
+        public static List<Polyline> FilterClosedPolylines(RawSelection raw)
+        {
+            var result = new List<Polyline>();
             var database = AcadContext.Document.Database;
 
-            using (var transaction = database.TransactionManager.StartTransaction())
+            using (var tx = database.TransactionManager.StartTransaction())
             {
-                foreach (ObjectId objectId in selectionResult.Value.GetObjectIds())
+                foreach (var objectId in raw.ObjectIds)
                 {
-                    if (transaction.GetObject(objectId, OpenMode.ForRead) is Polyline polyline
+                    if (tx.GetObject(objectId, OpenMode.ForRead) is Polyline polyline
                         && polyline.Closed)
                     {
-                        Classify(polyline, result);
+                        result.Add(polyline);
                     }
                 }
 
-                transaction.Commit();
+                tx.Commit();
             }
 
             return result;
         }
 
-        private static void Classify(Polyline polyline, ClassifiedPolylines bins)
+        /// <summary>
+        /// Classifies closed polylines into walls / windows / doors based on
+        /// their layer names. Call this after filtering.
+        /// </summary>
+        public static ClassifiedPolylines Classify(List<Polyline> closedPolylines)
         {
-            string layer = polyline.Layer;
+            var result = new ClassifiedPolylines();
 
-            if (layer.IndexOf("wall", StringComparison.OrdinalIgnoreCase) >= 0)
-                bins.Walls.Add(polyline);
-            else if (layer.IndexOf("window", StringComparison.OrdinalIgnoreCase) >= 0)
-                bins.Windows.Add(polyline);
-            else if (layer.IndexOf("door", StringComparison.OrdinalIgnoreCase) >= 0)
-                bins.Doors.Add(polyline);
+            foreach (var polyline in closedPolylines)
+            {
+                string layer = polyline.Layer;
+
+                if (layer.IndexOf("wall", StringComparison.OrdinalIgnoreCase) >= 0)
+                    result.Walls.Add(polyline);
+                else if (layer.IndexOf("window", StringComparison.OrdinalIgnoreCase) >= 0)
+                    result.Windows.Add(polyline);
+                else if (layer.IndexOf("door", StringComparison.OrdinalIgnoreCase) >= 0)
+                    result.Doors.Add(polyline);
+            }
+
+            return result;
         }
     }
 }
