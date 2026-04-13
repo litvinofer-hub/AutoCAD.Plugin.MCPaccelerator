@@ -37,5 +37,11 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin
 
         [CommandMethod("OL_EXPORT_JSON")]
         public static void ExportJson() => new ExportJsonWorkflow().Run();
+
+        [CommandMethod("OL_CREATE_AXIAL_SYSTEM")]
+        public static void CreateAxialSystem() => new CreateAxialSystemWorkflow().Run();
+
+        [CommandMethod("OL_CLEAR_AXIAL_SYSTEM")]
+        public static void ClearAxialSystem() => new ClearAxialSystemWorkflow().Run();
     }
 }
