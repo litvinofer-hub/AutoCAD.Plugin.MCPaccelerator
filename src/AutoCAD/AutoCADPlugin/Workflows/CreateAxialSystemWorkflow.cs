@@ -13,15 +13,15 @@ using MCPAccelerator.Utils.GeometryModel;
 namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
 {
     /// <summary>
-    /// Orchestrates the OL_CREATE_AXIAL_SYSTEM command. For the selected building
-    /// and story, finds all walls parallel to a user-chosen direction, deduplicates
-    /// their perpendicular positions, and draws labeled axis lines (with bubbles)
-    /// on the MCP_Axial_System layer.
+    /// Orchestrates the OL_CREATE_AXIAL_SYSTEM command.
     ///
-    /// Prompts:
-    /// 1. Pick building and story
-    /// 2. Pick direction: X, Y, or Other (custom 2D vector)
-    /// 3. Pick symbol type: Numbers (1,2,3), Lowercase (a,b,c), Uppercase (A,B,C)
+    /// For the selected building and story:
+    /// 1. Finds walls parallel to a user-chosen direction.
+    /// 2. Deduplicates their perpendicular positions.
+    /// 3. Draws labeled axis lines (with bubbles) on the MCP_Axial_System layer.
+    /// 4. Adds drawn ObjectIds to the story's <see cref="FloorPlanWorkingArea"/>.
+    /// 5. Resizes the working-area frame to include the new axes.
+    /// 6. Creates a domain <see cref="AxialSystem"/> on the <see cref="Story"/>.
     /// </summary>
     public class CreateAxialSystemWorkflow
     {
@@ -76,9 +76,32 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
             double lineStart = minAlong - margin - bubbleRadius * 2;
             double lineEnd = maxAlong + margin + bubbleRadius * 2;
 
-            // 8. Draw
-            DrawAxes(positions, dir, perpDir, lineStart, lineEnd,
+            // 8. Draw axes and collect ObjectIds
+            var drawnIds = DrawAxes(positions, dir, perpDir, lineStart, lineEnd,
                 symbolType.Value, bubbleRadius);
+
+            // 9. Create domain AxialSystem
+            var domainSymbolType = symbolType.Value switch
+            {
+                SymbolType.Numbers   => AxisSymbolType.Numbers,
+                SymbolType.LowerCase => AxisSymbolType.LowerCase,
+                SymbolType.UpperCase => AxisSymbolType.UpperCase,
+                _                    => AxisSymbolType.Numbers
+            };
+
+            var axialSystem = new AxialSystem(
+                story.Id, dir, perpDir, domainSymbolType,
+                positions, lineStart, lineEnd, bubbleRadius);
+            story.AddAxialSystem(axialSystem);
+
+            // 10. Add drawn ObjectIds to FloorPlanWorkingArea + resize frame
+            var workingAreas = BuildingSession.GetWorkingAreas(building);
+            var area = workingAreas?.FindByStory(story.Id);
+            if (area != null)
+            {
+                area.SelectedObjectIds.AddRange(drawnIds);
+                WorkingAreaFrameHelper.RedrawFrame(area);
+            }
 
             _editor.WriteMessage(
                 $"\nCreated {positions.Count} axial axis/axes on layer '{LayerAxes}'.");
@@ -143,6 +166,8 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
             return v;
         }
 
+        private enum SymbolType { Numbers, LowerCase, UpperCase }
+
         private SymbolType? PromptSymbolType()
         {
             var options = new PromptKeywordOptions(
@@ -172,10 +197,6 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
         // Wall analysis
         // -------------------------------------------------------------------
 
-        /// <summary>
-        /// Returns walls whose center-line direction is parallel to
-        /// <paramref name="direction"/> (cross product ≈ 0).
-        /// </summary>
         private static List<Wall> FindParallelWalls(List<Wall> walls, Vec2 direction)
         {
             var result = new List<Wall>();
@@ -192,11 +213,6 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
             return result;
         }
 
-        /// <summary>
-        /// Projects each parallel wall's midpoint onto <paramref name="perpDir"/>,
-        /// deduplicates within <see cref="UnitSystem.LengthEpsilon"/>, and returns
-        /// the sorted list of unique perpendicular positions.
-        /// </summary>
         private static List<double> ComputeUniquePositions(
             List<Wall> walls, Vec2 perpDir, UnitSystem units)
         {
@@ -218,11 +234,6 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
             return positions;
         }
 
-        /// <summary>
-        /// Returns the min/max scalar projections of ALL wall endpoints onto
-        /// <paramref name="dir"/>. Used to size the axis lines so they span the
-        /// full building footprint.
-        /// </summary>
         private static (double min, double max) ComputeExtentAlongDirection(
             List<Wall> walls, Vec2 dir)
         {
@@ -247,9 +258,14 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
         // Drawing
         // -------------------------------------------------------------------
 
-        private void DrawAxes(List<double> positions, Vec2 dir, Vec2 perpDir,
+        /// <summary>
+        /// Draws axis lines with bubbles and returns the ObjectIds of all
+        /// drawn entities (lines, circles, texts).
+        /// </summary>
+        private List<ObjectId> DrawAxes(List<double> positions, Vec2 dir, Vec2 perpDir,
             double lineStart, double lineEnd, SymbolType symbolType, double bubbleRadius)
         {
+            var drawnIds = new List<ObjectId>();
             var doc = AcadContext.Document;
             var db = doc.Database;
 
@@ -268,8 +284,6 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                     double perpPos = positions[i];
                     string symbol = GetSymbol(i, symbolType);
 
-                    // Axis line endpoints:
-                    //   point = perpPos * perpDir + t * dir
                     var startPt = new Point3d(
                         perpPos * perpDir.X + lineStart * dir.X,
                         perpPos * perpDir.Y + lineStart * dir.Y, 0);
@@ -277,7 +291,6 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                         perpPos * perpDir.X + lineEnd * dir.X,
                         perpPos * perpDir.Y + lineEnd * dir.Y, 0);
 
-                    // Bubble centers sit just outside the line ends
                     var bubbleStartPt = new Point3d(
                         startPt.X - dir.X * bubbleRadius,
                         startPt.Y - dir.Y * bubbleRadius, 0);
@@ -292,27 +305,32 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                         line.LinetypeId = linetypeId;
                     modelSpace.AppendEntity(line);
                     tx.AddNewlyCreatedDBObject(line, true);
+                    drawnIds.Add(line.ObjectId);
 
                     // Bubbles at both ends
-                    DrawBubble(tx, modelSpace, bubbleStartPt, bubbleRadius, symbol);
-                    DrawBubble(tx, modelSpace, bubbleEndPt, bubbleRadius, symbol);
+                    drawnIds.AddRange(DrawBubble(tx, modelSpace, bubbleStartPt, bubbleRadius, symbol));
+                    drawnIds.AddRange(DrawBubble(tx, modelSpace, bubbleEndPt, bubbleRadius, symbol));
                 }
 
                 tx.Commit();
             }
+
+            return drawnIds;
         }
 
         /// <summary>
-        /// Draws a circle with a centered label — the standard architectural
-        /// axis bubble.
+        /// Draws a circle with a centered label and returns the ObjectIds.
         /// </summary>
-        private static void DrawBubble(Transaction tx, BlockTableRecord modelSpace,
+        private static List<ObjectId> DrawBubble(Transaction tx, BlockTableRecord modelSpace,
             Point3d center, double radius, string symbol)
         {
+            var ids = new List<ObjectId>();
+
             var circle = new Circle(center, Vector3d.ZAxis, radius);
             circle.Layer = LayerAxes;
             modelSpace.AppendEntity(circle);
             tx.AddNewlyCreatedDBObject(circle, true);
+            ids.Add(circle.ObjectId);
 
             var text = new DBText
             {
@@ -325,13 +343,14 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
             };
             modelSpace.AppendEntity(text);
             tx.AddNewlyCreatedDBObject(text, true);
+            ids.Add(text.ObjectId);
+
+            return ids;
         }
 
         // -------------------------------------------------------------------
         // Helpers
         // -------------------------------------------------------------------
-
-        private enum SymbolType { Numbers, LowerCase, UpperCase }
 
         private static string GetSymbol(int index, SymbolType type)
         {
@@ -349,10 +368,6 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
             return units.Unit == LengthUnit.Inches ? 12.0 : 0.3;
         }
 
-        /// <summary>
-        /// Tries to load the CENTER linetype from acad.lin. Returns
-        /// <see cref="ObjectId.Null"/> if unavailable.
-        /// </summary>
         private static ObjectId LoadCenterLinetype(Transaction tx, Database db)
         {
             var linetypeTable = (LinetypeTable)tx.GetObject(
@@ -364,16 +379,12 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
             try
             {
                 db.LoadLineTypeFile("CENTER", "acad.lin");
-                // Re-read after loading
                 linetypeTable = (LinetypeTable)tx.GetObject(
                     db.LinetypeTableId, OpenMode.ForRead);
                 if (linetypeTable.Has("CENTER"))
                     return linetypeTable["CENTER"];
             }
-            catch
-            {
-                // CENTER linetype not available — fall back to continuous
-            }
+            catch { }
 
             return ObjectId.Null;
         }

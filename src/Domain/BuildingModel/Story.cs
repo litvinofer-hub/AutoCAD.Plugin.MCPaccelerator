@@ -25,6 +25,20 @@ namespace MCPAccelerator.Domain.BuildingModel
         public double Height => TopLevel.Elevation - BotLevel.Elevation;
 
         /// <summary>
+        /// Axial systems attached to this story (e.g. one for X-direction,
+        /// one for Y-direction). Managed via <see cref="AddAxialSystem"/>
+        /// and <see cref="RemoveAxialSystem"/>.
+        /// </summary>
+        private readonly List<AxialSystem> _axialSystems = [];
+        public IReadOnlyList<AxialSystem> AxialSystems => _axialSystems.AsReadOnly();
+
+        public void AddAxialSystem(AxialSystem axialSystem) => _axialSystems.Add(axialSystem);
+
+        public bool RemoveAxialSystem(AxialSystem axialSystem) => _axialSystems.Remove(axialSystem);
+
+        public void ClearAxialSystems() => _axialSystems.Clear();
+
+        /// <summary>
         /// Returns all levels in order: BotLevel, intermediate levels, TopLevel.
         /// </summary>
         public List<Level> AllLevels
