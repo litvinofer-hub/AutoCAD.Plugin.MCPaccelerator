@@ -32,8 +32,6 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
     /// </summary>
     public class DeleteAxialLineWorkflow
     {
-        private const string LayerAxes = "MCP_Axial_System";
-
         private readonly Editor _editor = AcadContext.Editor;
 
         public void Run()
@@ -137,7 +135,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                 var entity = tx.GetObject(result.ObjectId, OpenMode.ForRead) as Entity;
                 tx.Commit();
 
-                if (entity == null || entity.Layer != LayerAxes)
+                if (entity == null || entity.Layer != McpLayers.Axes)
                 {
                     _editor.WriteMessage("\nSelected entity is not on the axial system layer.");
                     return null;

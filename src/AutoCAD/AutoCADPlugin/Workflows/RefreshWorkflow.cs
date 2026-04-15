@@ -146,7 +146,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
         /// </summary>
         private static bool Is3DViewActive()
         {
-            var layers3D = new[] { "MCP_3D_Walls", "MCP_3D_Windows", "MCP_3D_Doors" };
+            var layers3D = McpLayers.All3D;
             var database = AcadContext.Document.Database;
 
             using (var tx = database.TransactionManager.StartTransaction())

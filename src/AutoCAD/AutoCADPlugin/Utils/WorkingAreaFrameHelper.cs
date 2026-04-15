@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using Autodesk.AutoCAD.Colors;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 using AcadPolyline = Autodesk.AutoCAD.DatabaseServices.Polyline;
@@ -13,9 +12,6 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Utils
     /// </summary>
     public static class WorkingAreaFrameHelper
     {
-        public const string LayerFloorFrame = "MCP_Floor_Frame";
-        public const short FrameColorIndex = 3; // green
-
         /// <summary>
         /// Draws a 2D axis-aligned bounding-box rectangle + label around all
         /// given ObjectIds. Returns both new ObjectIds.
@@ -109,21 +105,6 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Utils
             }
         }
 
-        public static void EnsureLayer(Transaction tx, Database db)
-        {
-            var layerTable = (LayerTable)tx.GetObject(db.LayerTableId, OpenMode.ForRead);
-            if (layerTable.Has(LayerFloorFrame)) return;
-
-            layerTable.UpgradeOpen();
-            var record = new LayerTableRecord
-            {
-                Name = LayerFloorFrame,
-                Color = Color.FromColorIndex(ColorMethod.ByAci, FrameColorIndex)
-            };
-            layerTable.Add(record);
-            tx.AddNewlyCreatedDBObject(record, true);
-        }
-
         // -------------------------------------------------------------------
 
         private static (ObjectId frameId, ObjectId labelId) DrawFrameAtBounds(
@@ -139,7 +120,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Utils
             using (doc.LockDocument())
             using (var tx = db.TransactionManager.StartTransaction())
             {
-                EnsureLayer(tx, db);
+                McpLayers.Ensure(tx, db, McpLayers.FloorFrame, McpLayers.GreenColorIndex);
 
                 var blockTable = (BlockTable)tx.GetObject(db.BlockTableId, OpenMode.ForRead);
                 var modelSpace = (BlockTableRecord)tx.GetObject(
@@ -151,7 +132,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Utils
                 rect.AddVertexAt(2, new Point2d(maxX, maxY), 0, 0, 0);
                 rect.AddVertexAt(3, new Point2d(minX, maxY), 0, 0, 0);
                 rect.Closed = true;
-                rect.Layer = LayerFloorFrame;
+                rect.Layer = McpLayers.FloorFrame;
                 modelSpace.AppendEntity(rect);
                 tx.AddNewlyCreatedDBObject(rect, true);
                 frameId = rect.ObjectId;
@@ -163,7 +144,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Utils
                 {
                     TextString = label,
                     Height = textHeight,
-                    Layer = LayerFloorFrame,
+                    Layer = McpLayers.FloorFrame,
                     Position = new Point3d(minX, minY - textHeight * 1.5, 0)
                 };
                 modelSpace.AppendEntity(text);

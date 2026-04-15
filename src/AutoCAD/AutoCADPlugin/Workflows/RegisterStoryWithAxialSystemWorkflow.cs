@@ -33,9 +33,6 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
     /// </summary>
     public class RegisterStoryWithAxialSystemWorkflow
     {
-        private const string LayerAxes = "MCP_Axial_System";
-        private const short AxisColorIndex = 2; // yellow
-
         private readonly Editor _editor = AcadContext.Editor;
 
         public void Run()
@@ -181,7 +178,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                 {
                     if (id.IsErased) continue;
                     var entity = tx.GetObject(id, OpenMode.ForRead) as Entity;
-                    if (entity != null && entity.Layer == LayerAxes)
+                    if (entity != null && entity.Layer == McpLayers.Axes)
                         toErase.Add(id);
                 }
                 tx.Commit();
@@ -221,7 +218,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
             using (doc.LockDocument())
             using (var tx = db.TransactionManager.StartTransaction())
             {
-                EnsureAxialLayer(tx, db);
+                McpLayers.Ensure(tx, db, McpLayers.Axes, McpLayers.YellowColorIndex);
                 var linetypeId = LoadCenterLinetype(tx, db);
 
                 var blockTable = (BlockTable)tx.GetObject(db.BlockTableId, OpenMode.ForRead);
@@ -249,7 +246,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                             endPt.X + direction.Direction.X * bubbleRadius,
                             endPt.Y + direction.Direction.Y * bubbleRadius, 0);
 
-                        var line = new Line(startPt, endPt) { Layer = LayerAxes };
+                        var line = new Line(startPt, endPt) { Layer = McpLayers.Axes };
                         if (linetypeId != ObjectId.Null) line.LinetypeId = linetypeId;
                         modelSpace.AppendEntity(line);
                         tx.AddNewlyCreatedDBObject(line, true);
@@ -272,7 +269,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
         {
             var ids = new List<ObjectId>();
 
-            var circle = new Circle(center, Vector3d.ZAxis, radius) { Layer = LayerAxes };
+            var circle = new Circle(center, Vector3d.ZAxis, radius) { Layer = McpLayers.Axes };
             modelSpace.AppendEntity(circle);
             tx.AddNewlyCreatedDBObject(circle, true);
             ids.Add(circle.ObjectId);
@@ -281,7 +278,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
             {
                 TextString = symbol,
                 Height = radius * 1.2,
-                Layer = LayerAxes,
+                Layer = McpLayers.Axes,
                 HorizontalMode = TextHorizontalMode.TextCenter,
                 VerticalMode = TextVerticalMode.TextVerticalMid,
                 AlignmentPoint = center
@@ -291,22 +288,6 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
             ids.Add(text.ObjectId);
 
             return ids;
-        }
-
-        private static void EnsureAxialLayer(Transaction tx, Database db)
-        {
-            var layerTable = (LayerTable)tx.GetObject(db.LayerTableId, OpenMode.ForRead);
-            if (layerTable.Has(LayerAxes)) return;
-
-            layerTable.UpgradeOpen();
-            var record = new LayerTableRecord
-            {
-                Name = LayerAxes,
-                Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(
-                    Autodesk.AutoCAD.Colors.ColorMethod.ByAci, AxisColorIndex)
-            };
-            layerTable.Add(record);
-            tx.AddNewlyCreatedDBObject(record, true);
         }
 
         private static ObjectId LoadCenterLinetype(Transaction tx, Database db)

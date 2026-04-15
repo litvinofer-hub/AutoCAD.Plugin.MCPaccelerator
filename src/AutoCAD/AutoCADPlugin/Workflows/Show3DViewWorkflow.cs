@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using System.Linq;
-using Autodesk.AutoCAD.Colors;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
@@ -21,10 +20,6 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
     /// </summary>
     public class Show3DViewWorkflow
     {
-        private const string Layer3DWalls   = "MCP_3D_Walls";
-        private const string Layer3DWindows = "MCP_3D_Windows";
-        private const string Layer3DDoors   = "MCP_3D_Doors";
-
         private readonly Editor _editor = AcadContext.Editor;
 
         public void Run()
@@ -70,9 +65,9 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
             using (doc.LockDocument())
             using (var tx = db.TransactionManager.StartTransaction())
             {
-                EnsureLayer(tx, db, Layer3DWalls,   colorIndex: 7);  // white
-                EnsureLayer(tx, db, Layer3DWindows, colorIndex: 4);  // cyan
-                EnsureLayer(tx, db, Layer3DDoors,   colorIndex: 1);  // red
+                McpLayers.Ensure(tx, db, McpLayers.Walls3D,   McpLayers.WhiteColorIndex);
+                McpLayers.Ensure(tx, db, McpLayers.Windows3D, McpLayers.CyanColorIndex);
+                McpLayers.Ensure(tx, db, McpLayers.Doors3D,   McpLayers.RedColorIndex);
 
                 var blockTable = (BlockTable)tx.GetObject(db.BlockTableId, OpenMode.ForRead);
                 var modelSpace = (BlockTableRecord)tx.GetObject(
@@ -86,7 +81,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                     // Solid wall segments (horizontal strips between openings) — full height
                     foreach (var subWall in wall.SubWalls())
                     {
-                        ExtrudeRect(tx, modelSpace, subWall, botZ, wall.Height, Layer3DWalls);
+                        ExtrudeRect(tx, modelSpace, subWall, botZ, wall.Height, McpLayers.Walls3D);
                         totals.SubWalls++;
                     }
 
@@ -100,26 +95,26 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                         // Sill: solid wall below the opening
                         if (openingBotZ > botZ)
                         {
-                            ExtrudeRect(tx, modelSpace, rect, botZ, openingBotZ - botZ, Layer3DWalls);
+                            ExtrudeRect(tx, modelSpace, rect, botZ, openingBotZ - botZ, McpLayers.Walls3D);
                             totals.Sills++;
                         }
 
                         // Lintel: solid wall above the opening
                         if (openingTopZ < topZ)
                         {
-                            ExtrudeRect(tx, modelSpace, rect, openingTopZ, topZ - openingTopZ, Layer3DWalls);
+                            ExtrudeRect(tx, modelSpace, rect, openingTopZ, topZ - openingTopZ, McpLayers.Walls3D);
                             totals.Lintels++;
                         }
 
                         // Panel: the door/window itself
                         if (opening is Door)
                         {
-                            ExtrudeRect(tx, modelSpace, rect, openingBotZ, opening.Height, Layer3DDoors);
+                            ExtrudeRect(tx, modelSpace, rect, openingBotZ, opening.Height, McpLayers.Doors3D);
                             totals.Doors++;
                         }
                         else
                         {
-                            ExtrudeRect(tx, modelSpace, rect, openingBotZ, opening.Height, Layer3DWindows);
+                            ExtrudeRect(tx, modelSpace, rect, openingBotZ, opening.Height, McpLayers.Windows3D);
                             totals.Windows++;
                         }
                     }
@@ -187,23 +182,5 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
             _editor.Command("_-VISUALSTYLES", "_Current", "_Shaded");
         }
 
-        // -------------------------------------------------------------------
-        // Layer helper (same pattern as PrintBuildingWorkflow)
-        // -------------------------------------------------------------------
-
-        private static void EnsureLayer(Transaction tx, Database db, string name, short colorIndex)
-        {
-            var layerTable = (LayerTable)tx.GetObject(db.LayerTableId, OpenMode.ForRead);
-            if (layerTable.Has(name)) return;
-
-            layerTable.UpgradeOpen();
-            var record = new LayerTableRecord
-            {
-                Name = name,
-                Color = Color.FromColorIndex(ColorMethod.ByAci, colorIndex)
-            };
-            layerTable.Add(record);
-            tx.AddNewlyCreatedDBObject(record, true);
-        }
     }
 }

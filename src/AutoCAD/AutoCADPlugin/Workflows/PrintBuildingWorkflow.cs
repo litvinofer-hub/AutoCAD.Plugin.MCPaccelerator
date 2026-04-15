@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Autodesk.AutoCAD.Colors;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
@@ -28,10 +27,6 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
     /// </summary>
     public class PrintBuildingWorkflow
     {
-        private const string LayerWalls   = "MCP_Walls";
-        private const string LayerWindows = "MCP_Windows";
-        private const string LayerDoors   = "MCP_Doors";
-
         private readonly Editor _editor = AcadContext.Editor;
 
         public void Run()
@@ -93,9 +88,9 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
             using (doc.LockDocument())
             using (var tx = db.TransactionManager.StartTransaction())
             {
-                EnsureLayer(tx, db, LayerWalls,   colorIndex: 7); // white
-                EnsureLayer(tx, db, LayerWindows, colorIndex: 4); // cyan
-                EnsureLayer(tx, db, LayerDoors,   colorIndex: 1); // red
+                McpLayers.Ensure(tx, db, McpLayers.Walls,   McpLayers.WhiteColorIndex);
+                McpLayers.Ensure(tx, db, McpLayers.Windows, McpLayers.CyanColorIndex);
+                McpLayers.Ensure(tx, db, McpLayers.Doors,   McpLayers.RedColorIndex);
 
                 var blockTable = (BlockTable)tx.GetObject(db.BlockTableId, OpenMode.ForRead);
                 var modelSpace = (BlockTableRecord)tx.GetObject(
@@ -106,7 +101,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                     // Walls are drawn as the pieces BETWEEN their openings.
                     foreach (var subWall in wall.SubWalls())
                     {
-                        DrawRect(tx, modelSpace, subWall, LayerWalls, dx, dy);
+                        DrawRect(tx, modelSpace, subWall, McpLayers.Walls, dx, dy);
                         totals.SubWalls++;
                     }
 
@@ -116,12 +111,12 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                         var rect = opening.Line.ToRect(wall.Thickness);
                         if (opening is Door)
                         {
-                            DrawRect(tx, modelSpace, rect, LayerDoors, dx, dy);
+                            DrawRect(tx, modelSpace, rect, McpLayers.Doors, dx, dy);
                             totals.Doors++;
                         }
                         else
                         {
-                            DrawRect(tx, modelSpace, rect, LayerWindows, dx, dy);
+                            DrawRect(tx, modelSpace, rect, McpLayers.Windows, dx, dy);
                             totals.Windows++;
                         }
                     }
@@ -182,21 +177,6 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                 if (p.Y < minY) minY = p.Y;
                 if (p.Y > maxY) maxY = p.Y;
             }
-        }
-
-        private static void EnsureLayer(Transaction tx, Database db, string name, short colorIndex)
-        {
-            var layerTable = (LayerTable)tx.GetObject(db.LayerTableId, OpenMode.ForRead);
-            if (layerTable.Has(name)) return;
-
-            layerTable.UpgradeOpen();
-            var record = new LayerTableRecord
-            {
-                Name = name,
-                Color = Color.FromColorIndex(ColorMethod.ByAci, colorIndex)
-            };
-            layerTable.Add(record);
-            tx.AddNewlyCreatedDBObject(record, true);
         }
 
         /// <summary>

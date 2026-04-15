@@ -25,8 +25,6 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
     /// </summary>
     public class ClearAxialSystemWorkflow
     {
-        private const string LayerAxes = "MCP_Axial_System";
-
         private readonly Editor _editor = AcadContext.Editor;
 
         public void Run()
@@ -89,7 +87,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                 {
                     if (id.IsErased) continue;
                     var entity = tx.GetObject(id, OpenMode.ForRead) as Entity;
-                    if (entity != null && entity.Layer == LayerAxes)
+                    if (entity != null && entity.Layer == McpLayers.Axes)
                         result.Add(id);
                 }
 
@@ -141,7 +139,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
             using (var tx = db.TransactionManager.StartTransaction())
             {
                 var layerTable = (LayerTable)tx.GetObject(db.LayerTableId, OpenMode.ForRead);
-                if (!layerTable.Has(LayerAxes))
+                if (!layerTable.Has(McpLayers.Axes))
                     return 0;
 
                 var blockTable = (BlockTable)tx.GetObject(db.BlockTableId, OpenMode.ForRead);
@@ -151,7 +149,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                 foreach (var entityId in modelSpace)
                 {
                     var entity = (Entity)tx.GetObject(entityId, OpenMode.ForRead);
-                    if (entity.Layer == LayerAxes)
+                    if (entity.Layer == McpLayers.Axes)
                     {
                         entity.UpgradeOpen();
                         entity.Erase();

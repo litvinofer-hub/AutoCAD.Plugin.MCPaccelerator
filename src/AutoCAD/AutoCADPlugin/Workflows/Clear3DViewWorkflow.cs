@@ -11,13 +11,6 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
     /// </summary>
     public class Clear3DViewWorkflow
     {
-        private static readonly string[] Layers3D =
-        {
-            "MCP_3D_Walls",
-            "MCP_3D_Windows",
-            "MCP_3D_Doors"
-        };
-
         private readonly Editor _editor = AcadContext.Editor;
 
         public void Run()
@@ -54,7 +47,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                 {
                     var entity = (Entity)tx.GetObject(entityId, OpenMode.ForRead);
 
-                    foreach (var layer in Layers3D)
+                    foreach (var layer in McpLayers.All3D)
                     {
                         if (entity.Layer == layer)
                         {
