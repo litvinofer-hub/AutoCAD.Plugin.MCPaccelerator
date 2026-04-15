@@ -1,7 +1,7 @@
+using System.Collections.Generic;
 using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
-using MCPAccelerator.AutoCAD.AutoCADPlugin.Prompts;
 using MCPAccelerator.AutoCAD.AutoCADPlugin.Utils;
 
 namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
@@ -9,12 +9,18 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
     /// <summary>
     /// Orchestrates the OL_CLEAR_AXIAL_SYSTEM command.
     ///
-    /// Prompts the user to pick a building and story, then:
-    /// 1. Erases axial system entities from the canvas (MCP_Axial_System layer,
-    ///    scoped to ObjectIds tracked in the <see cref="FloorPlanWorkingArea"/>).
-    /// 2. Removes those ObjectIds from the working area's SelectedObjectIds.
-    /// 3. Resizes the working-area bounding-box frame.
-    /// 4. Clears the <see cref="Domain.BuildingModel.AxialSystem"/> from the Story.
+    /// Erases all axial system entities across every building and story
+    /// in the current session — no user prompts required.
+    ///
+    /// For each story that has an axial system:
+    /// 1. Finds axial-layer entities tracked in the <see cref="FloorPlanWorkingArea"/>.
+    /// 2. Erases them from the canvas.
+    /// 3. Removes those ObjectIds from the working area's SelectedObjectIds.
+    /// 4. Resizes the working-area bounding-box frame.
+    /// 5. Clears the <see cref="Domain.BuildingModel.AxialSystem"/> from the Story.
+    ///
+    /// Also performs a fallback erase of any axial-layer entities not tracked
+    /// in a working area (e.g. orphaned entities).
     /// </summary>
     public class ClearAxialSystemWorkflow
     {
@@ -24,55 +30,57 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
 
         public void Run()
         {
-            var context = BuildingContextPrompt.PickBuildingAndStory("clear axial system");
-            if (context == null) return;
-            var (building, story) = context.Value;
+            int totalErased = 0;
+            int storiesCleared = 0;
 
-            var workingAreas = BuildingSession.GetWorkingAreas(building);
-            var area = workingAreas?.FindByStory(story.Id);
-
-            // 1. Erase axial entities from canvas and collect their ObjectIds
-            int erased = 0;
-
-            if (area != null)
+            foreach (var (workingAreas, building) in BuildingSession.Entries)
             {
-                // Only erase axial entities that are tracked in this working area
-                var axialIds = FindAxialObjectIds(area);
-                erased = EraseEntities(axialIds);
+                foreach (var story in building.Stories)
+                {
+                    if (story.AxialSystem == null) continue;
 
-                // 2. Remove those ObjectIds from the working area
-                foreach (var id in axialIds)
-                    area.SelectedObjectIds.Remove(id);
+                    var area = workingAreas.FindByStory(story.Id);
 
-                // 3. Resize frame (if there are still elements left)
-                if (area.SelectedObjectIds.Count > 0)
-                    WorkingAreaFrameHelper.RedrawFrame(area);
+                    if (area != null)
+                    {
+                        // Find and erase axial entities tracked in the working area
+                        var axialIds = FindAxialObjectIds(area);
+                        totalErased += EraseEntities(axialIds);
+
+                        foreach (var id in axialIds)
+                            area.SelectedObjectIds.Remove(id);
+
+                        if (area.SelectedObjectIds.Count > 0)
+                            WorkingAreaFrameHelper.RedrawFrame(area);
+                    }
+
+                    // Clear domain model
+                    story.ClearAxialSystem();
+                    storiesCleared++;
+                }
             }
-            else
-            {
-                // Fallback: erase all entities on the axial layer
-                erased = EraseAllOnAxialLayer();
-            }
 
-            // 4. Clear domain AxialSystems from story
-            story.ClearAxialSystems();
+            // Fallback: erase any orphaned entities on the axial layer
+            int orphaned = EraseAllOnAxialLayer();
+            totalErased += orphaned;
 
-            if (erased == 0)
+            if (totalErased == 0 && storiesCleared == 0)
             {
                 _editor.WriteMessage("\nNo axial system entities to remove.");
                 return;
             }
 
-            _editor.WriteMessage($"\nRemoved {erased} axial system entity(ies) from '{story.Name}'.");
+            _editor.WriteMessage(
+                $"\nCleared axial systems from {storiesCleared} story(ies). " +
+                $"Removed {totalErased} entity(ies) total.");
         }
 
         /// <summary>
         /// Finds ObjectIds in the working area that are on the axial system layer.
         /// </summary>
-        private static System.Collections.Generic.List<ObjectId> FindAxialObjectIds(
-            FloorPlanWorkingArea area)
+        private static List<ObjectId> FindAxialObjectIds(FloorPlanWorkingArea area)
         {
-            var result = new System.Collections.Generic.List<ObjectId>();
+            var result = new List<ObjectId>();
             var database = AcadContext.Document.Database;
 
             using (var tx = database.TransactionManager.StartTransaction())
@@ -91,7 +99,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
             return result;
         }
 
-        private static int EraseEntities(System.Collections.Generic.List<ObjectId> objectIds)
+        private static int EraseEntities(List<ObjectId> objectIds)
         {
             if (objectIds.Count == 0) return 0;
 
@@ -120,8 +128,8 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
         }
 
         /// <summary>
-        /// Fallback when no working area exists: erases every entity on
-        /// the MCP_Axial_System layer.
+        /// Fallback: erases every entity on the MCP_Axial_System layer
+        /// that might not be tracked in any working area.
         /// </summary>
         private static int EraseAllOnAxialLayer()
         {

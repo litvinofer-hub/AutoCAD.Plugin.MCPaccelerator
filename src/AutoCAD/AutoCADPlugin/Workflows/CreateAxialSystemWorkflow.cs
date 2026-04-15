@@ -19,9 +19,13 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
     /// 1. Finds walls parallel to a user-chosen direction.
     /// 2. Deduplicates their perpendicular positions.
     /// 3. Draws labeled axis lines (with bubbles) on the MCP_Axial_System layer.
-    /// 4. Adds drawn ObjectIds to the story's <see cref="FloorPlanWorkingArea"/>.
-    /// 5. Resizes the working-area frame to include the new axes.
-    /// 6. Creates a domain <see cref="AxialSystem"/> on the <see cref="Story"/>.
+    /// 4. Builds domain objects: <see cref="AxialSystemDirection"/> with
+    ///    <see cref="AxialLine"/> items, added to the story's <see cref="AxialSystem"/>.
+    /// 5. Adds drawn ObjectIds to the story's <see cref="FloorPlanWorkingArea"/>
+    ///    and resizes the frame.
+    ///
+    /// If the story does not have an <see cref="AxialSystem"/> yet, one is created.
+    /// A direction parallel to an existing one in the same system is rejected.
     /// </summary>
     public class CreateAxialSystemWorkflow
     {
@@ -42,11 +46,20 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
             if (direction == null) return;
             Vec2 dir = Vec2Math.Normalize(direction.Value);
 
-            // 3. Pick symbol type
+            // 3. Check if this direction already exists in the story's axial system
+            if (story.AxialSystem != null &&
+                story.AxialSystem.FindDirection(dir) != null)
+            {
+                _editor.WriteMessage(
+                    "\nAn axial direction parallel to this vector already exists in this story.");
+                return;
+            }
+
+            // 4. Pick symbol type
             var symbolType = PromptSymbolType();
             if (symbolType == null) return;
 
-            // 4. Gather walls for this story
+            // 5. Gather walls for this story
             var storyWalls = building.Walls.Where(w => w.StoryId == story.Id).ToList();
             if (storyWalls.Count == 0)
             {
@@ -54,7 +67,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                 return;
             }
 
-            // 5. Filter walls parallel to chosen direction
+            // 6. Filter walls parallel to chosen direction
             var parallelWalls = FindParallelWalls(storyWalls, dir);
             if (parallelWalls.Count == 0)
             {
@@ -62,11 +75,11 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                 return;
             }
 
-            // 6. Unique perpendicular positions (deduplicated, sorted)
+            // 7. Unique perpendicular positions (deduplicated, sorted)
             var perpDir = Vec2Math.Perpendicular(dir);
             var positions = ComputeUniquePositions(parallelWalls, perpDir, building.Units);
 
-            // 7. Compute extent along direction (across ALL story walls) for line length
+            // 8. Compute extent along direction (across ALL story walls) for line length
             var (minAlong, maxAlong) = ComputeExtentAlongDirection(storyWalls, dir);
             double span = maxAlong - minAlong;
             double margin = span * 0.15;
@@ -76,11 +89,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
             double lineStart = minAlong - margin - bubbleRadius * 2;
             double lineEnd = maxAlong + margin + bubbleRadius * 2;
 
-            // 8. Draw axes and collect ObjectIds
-            var drawnIds = DrawAxes(positions, dir, perpDir, lineStart, lineEnd,
-                symbolType.Value, bubbleRadius);
-
-            // 9. Create domain AxialSystem
+            // 9. Build domain AxialLines + draw on canvas
             var domainSymbolType = symbolType.Value switch
             {
                 SymbolType.Numbers   => AxisSymbolType.Numbers,
@@ -89,22 +98,48 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                 _                    => AxisSymbolType.Numbers
             };
 
-            var axialSystem = new AxialSystem(
-                story.Id, dir, perpDir, domainSymbolType,
-                positions, lineStart, lineEnd, bubbleRadius);
-            story.AddAxialSystem(axialSystem);
+            var axialLines = new List<AxialLine>();
+            for (int i = 0; i < positions.Count; i++)
+            {
+                double perpPos = positions[i];
+                string symbol = GetSymbol(i, symbolType.Value);
 
-            // 10. Add drawn ObjectIds to FloorPlanWorkingArea + resize frame
+                var startPt = new Point(
+                    perpPos * perpDir.X + lineStart * dir.X,
+                    perpPos * perpDir.Y + lineStart * dir.Y, 0);
+                var endPt = new Point(
+                    perpPos * perpDir.X + lineEnd * dir.X,
+                    perpPos * perpDir.Y + lineEnd * dir.Y, 0);
+
+                axialLines.Add(new AxialLine(symbol, new LineSegment(startPt, endPt)));
+            }
+
+            var axialDirection = new AxialSystemDirection(dir, domainSymbolType, axialLines);
+
+            // 10. Draw axes on canvas and collect ObjectIds per AxialLine
+            var idsPerLine = DrawAxes(axialLines, dir, bubbleRadius);
+
+            // 11. Add direction to story's AxialSystem (create if needed)
+            if (story.AxialSystem == null)
+                story.SetAxialSystem(new AxialSystem(story.Id, bubbleRadius));
+
+            story.AxialSystem.AddDirection(axialDirection);
+
+            // 12. Add drawn ObjectIds to FloorPlanWorkingArea + map per AxialLine
             var workingAreas = BuildingSession.GetWorkingAreas(building);
             var area = workingAreas?.FindByStory(story.Id);
             if (area != null)
             {
-                area.SelectedObjectIds.AddRange(drawnIds);
+                foreach (var (axialLine, ids) in idsPerLine)
+                {
+                    area.SelectedObjectIds.AddRange(ids);
+                    area.MapDomainElement(axialLine.Id, ids);
+                }
                 WorkingAreaFrameHelper.RedrawFrame(area);
             }
 
             _editor.WriteMessage(
-                $"\nCreated {positions.Count} axial axis/axes on layer '{LayerAxes}'.");
+                $"\nCreated {axialLines.Count} axial axis/axes on layer '{LayerAxes}'.");
         }
 
         // -------------------------------------------------------------------
@@ -259,13 +294,14 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
         // -------------------------------------------------------------------
 
         /// <summary>
-        /// Draws axis lines with bubbles and returns the ObjectIds of all
-        /// drawn entities (lines, circles, texts).
+        /// Draws axis lines with bubbles using domain AxialLine geometry.
+        /// Returns a list of (AxialLine, ObjectIds) pairs so callers can
+        /// map each domain AxialLine to its drawn AutoCAD entities.
         /// </summary>
-        private List<ObjectId> DrawAxes(List<double> positions, Vec2 dir, Vec2 perpDir,
-            double lineStart, double lineEnd, SymbolType symbolType, double bubbleRadius)
+        private List<(AxialLine axialLine, List<ObjectId> ids)> DrawAxes(
+            List<AxialLine> axialLines, Vec2 dir, double bubbleRadius)
         {
-            var drawnIds = new List<ObjectId>();
+            var result = new List<(AxialLine, List<ObjectId>)>();
             var doc = AcadContext.Document;
             var db = doc.Database;
 
@@ -279,17 +315,16 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                 var modelSpace = (BlockTableRecord)tx.GetObject(
                     blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
 
-                for (int i = 0; i < positions.Count; i++)
+                foreach (var axialLine in axialLines)
                 {
-                    double perpPos = positions[i];
-                    string symbol = GetSymbol(i, symbolType);
+                    var lineIds = new List<ObjectId>();
 
                     var startPt = new Point3d(
-                        perpPos * perpDir.X + lineStart * dir.X,
-                        perpPos * perpDir.Y + lineStart * dir.Y, 0);
+                        axialLine.Line.StartPoint.X,
+                        axialLine.Line.StartPoint.Y, 0);
                     var endPt = new Point3d(
-                        perpPos * perpDir.X + lineEnd * dir.X,
-                        perpPos * perpDir.Y + lineEnd * dir.Y, 0);
+                        axialLine.Line.EndPoint.X,
+                        axialLine.Line.EndPoint.Y, 0);
 
                     var bubbleStartPt = new Point3d(
                         startPt.X - dir.X * bubbleRadius,
@@ -305,17 +340,21 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                         line.LinetypeId = linetypeId;
                     modelSpace.AppendEntity(line);
                     tx.AddNewlyCreatedDBObject(line, true);
-                    drawnIds.Add(line.ObjectId);
+                    lineIds.Add(line.ObjectId);
 
                     // Bubbles at both ends
-                    drawnIds.AddRange(DrawBubble(tx, modelSpace, bubbleStartPt, bubbleRadius, symbol));
-                    drawnIds.AddRange(DrawBubble(tx, modelSpace, bubbleEndPt, bubbleRadius, symbol));
+                    lineIds.AddRange(
+                        DrawBubble(tx, modelSpace, bubbleStartPt, bubbleRadius, axialLine.Symbol));
+                    lineIds.AddRange(
+                        DrawBubble(tx, modelSpace, bubbleEndPt, bubbleRadius, axialLine.Symbol));
+
+                    result.Add((axialLine, lineIds));
                 }
 
                 tx.Commit();
             }
 
-            return drawnIds;
+            return result;
         }
 
         /// <summary>
