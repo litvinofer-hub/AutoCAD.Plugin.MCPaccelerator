@@ -43,6 +43,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
 
             _editor.WriteMessage(
                 $"\n3D view of '{building.Name}': {totals.SubWalls} wall solid(s), " +
+                $"{totals.Sills} sill(s), {totals.Lintels} lintel(s), " +
                 $"{totals.Windows} window(s), {totals.Doors} door(s).");
 
             SwitchToIsometricView();
@@ -55,6 +56,8 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
         private sealed class Totals
         {
             public int SubWalls;
+            public int Sills;
+            public int Lintels;
             public int Windows;
             public int Doors;
         }
@@ -78,20 +81,37 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                 foreach (var wall in building.Walls)
                 {
                     double botZ = wall.BotLevel.Elevation;
+                    double topZ = botZ + wall.Height;
 
-                    // Solid wall segments (between openings)
+                    // Solid wall segments (horizontal strips between openings) — full height
                     foreach (var subWall in wall.SubWalls())
                     {
                         ExtrudeRect(tx, modelSpace, subWall, botZ, wall.Height, Layer3DWalls);
                         totals.SubWalls++;
                     }
 
-                    // Openings as separate solids
+                    // Per opening: sill (below), panel (door/window), lintel (above)
                     foreach (var opening in wall.Openings)
                     {
                         var rect = opening.Line.ToRect(wall.Thickness);
                         double openingBotZ = opening.Line.StartPoint.Z;
+                        double openingTopZ = openingBotZ + opening.Height;
 
+                        // Sill: solid wall below the opening
+                        if (openingBotZ > botZ)
+                        {
+                            ExtrudeRect(tx, modelSpace, rect, botZ, openingBotZ - botZ, Layer3DWalls);
+                            totals.Sills++;
+                        }
+
+                        // Lintel: solid wall above the opening
+                        if (openingTopZ < topZ)
+                        {
+                            ExtrudeRect(tx, modelSpace, rect, openingTopZ, topZ - openingTopZ, Layer3DWalls);
+                            totals.Lintels++;
+                        }
+
+                        // Panel: the door/window itself
                         if (opening is Door)
                         {
                             ExtrudeRect(tx, modelSpace, rect, openingBotZ, opening.Height, Layer3DDoors);
@@ -155,13 +175,16 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
         }
 
         /// <summary>
-        /// Switches the current viewport to a south-west isometric view so the
-        /// user can immediately see the 3D building.
+        /// Switches the current viewport to a south-west isometric view with a
+        /// shaded visual style so solids appear opaque instead of wireframe.
         /// </summary>
         private void SwitchToIsometricView()
         {
             _editor.Command("_-VIEW", "_SWISO");
             _editor.Command("_ZOOM", "_E");
+            // Shaded visual style — otherwise the default 2D Wireframe makes
+            // solids look transparent (only edges are drawn).
+            _editor.Command("_-VISUALSTYLES", "_Current", "_Shaded");
         }
 
         // -------------------------------------------------------------------
