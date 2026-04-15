@@ -21,7 +21,10 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin
     /// entities, and re-converts to the domain model. Run after any drawing edit.
     ///
     /// <b>On-demand</b> — utilities that query or export the current state
-    /// (print, 3D view, export, delete, reset).
+    /// (print, 3D view, delete, reset).
+    ///
+    /// <b>Debugging</b> — export and visualize the domain model for diagnostics
+    /// (JSON export, SVG drawing).
     /// </summary>
     public class Commands
     {
@@ -32,8 +35,8 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin
         [CommandMethod("OL_CREATE_BUILDING")]
         public static void CreateBuilding() => new CreateBuildingWorkflow().Run();
 
-        [CommandMethod("OL_SET_FLOOR_PLAN_AREA")]
-        public static void SetFloorPlanArea() => new SetFloorPlanAreaWorkflow().Run();
+        [CommandMethod("OL_CREATE_FLOOR_PLAN_AREA")]
+        public static void CreateFloorPlanArea() => new SetFloorPlanAreaWorkflow().Run();
 
         [CommandMethod("OL_CREATE_AXIAL_SYSTEM")]
         public static void CreateAxialSystem() => new CreateAxialSystemWorkflow().Run();
@@ -69,6 +72,10 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin
 
         [CommandMethod("OL_CLEAR_3D")]
         public static void Clear3D() => new Clear3DViewWorkflow().Run();
+
+        // =================================================================
+        // Debugging — export and visualize the domain model
+        // =================================================================
 
         [CommandMethod("OL_EXPORT_JSON")]
         public static void ExportJson() => new ExportJsonWorkflow().Run();
