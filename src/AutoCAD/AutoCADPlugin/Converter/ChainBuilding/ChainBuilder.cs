@@ -151,6 +151,11 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Converter.ChainBuilding
         /// <summary>
         /// Materializes one connected component into a <see cref="Chain"/> with walls
         /// and openings sorted along <paramref name="direction"/>.
+        /// Cross-row flanking walls (e.g. a tall vertical wall connecting two
+        /// horizontal rows) are excluded from the chain — they served only as
+        /// graph links during BFS and must remain available as standalone walls.
+        /// A wall is cross-row if its perpendicular extent exceeds 2× the row
+        /// thickness (derived from the openings).
         /// </summary>
         private static Chain BuildChain(
             Vec2 direction,
@@ -159,9 +164,26 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Converter.ChainBuilding
             List<TaggedRect> allWalls,
             List<TaggedRect> allOpenings)
         {
-            var orderedWallIdx = wallIndices
+            var perp = Vec2Math.Perpendicular(direction);
+
+            // Compute perpendicular extent from openings — they define the row.
+            double rowPerpMin = double.MaxValue, rowPerpMax = double.MinValue;
+            foreach (var oi in openingIndices)
+            {
+                foreach (var p in allOpenings[oi].Rect.Points.Take(4))
+                {
+                    double pv = p.X * perp.X + p.Y * perp.Y;
+                    if (pv < rowPerpMin) rowPerpMin = pv;
+                    if (pv > rowPerpMax) rowPerpMax = pv;
+                }
+            }
+            double rowThickness = rowPerpMax - rowPerpMin;
+
+            var inRowWallIdx = wallIndices
+                .Where(i => FitsInRow(allWalls[i].Rect, perp, rowThickness))
                 .OrderBy(i => allWalls[i].Rect.ProjectCenter2D(direction))
                 .ToList();
+
             var orderedOpenings = openingIndices
                 .Select(i => allOpenings[i])
                 .OrderBy(o => o.Rect.ProjectCenter2D(direction))
@@ -169,9 +191,27 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Converter.ChainBuilding
 
             return new Chain(
                 direction,
-                orderedWallIdx.Select(i => allWalls[i]).ToList(),
+                inRowWallIdx.Select(i => allWalls[i]).ToList(),
                 orderedOpenings,
-                orderedWallIdx);
+                inRowWallIdx);
+        }
+
+        /// <summary>
+        /// A wall fits in the row if its perpendicular extent does not
+        /// significantly exceed the row thickness derived from the openings.
+        /// A small stub wall (e.g. 2×4 between two windows on a 4-thick row)
+        /// passes; a tall cross-row wall (e.g. 5×108 connecting two rows) fails.
+        /// </summary>
+        private static bool FitsInRow(Rect wall, Vec2 perp, double rowThickness)
+        {
+            double min = double.MaxValue, max = double.MinValue;
+            foreach (var p in wall.Points.Take(4))
+            {
+                double pv = p.X * perp.X + p.Y * perp.Y;
+                if (pv < min) min = pv;
+                if (pv > max) max = pv;
+            }
+            return (max - min) <= rowThickness * 2;
         }
     }
 }

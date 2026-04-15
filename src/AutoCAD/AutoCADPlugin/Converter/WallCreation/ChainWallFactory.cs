@@ -71,25 +71,34 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Converter.WallCreation
             var perp = Vec2Math.Perpendicular(dir);
 
             double minT = double.MaxValue, maxT = double.MinValue;
-            double perpSum = 0;
-            int vertexCount = 0;
 
+            // Span (minT/maxT) comes from all elements — walls + openings.
             foreach (var elem in chain.Walls.Concat(chain.Openings))
             {
-                // Rect.Points is closed (first corner duplicated at the end).
-                // Take only the 4 unique corners so neither the span nor the
-                // perpendicular average is biased toward the first vertex.
                 foreach (var p in elem.Rect.Points.Take(4))
                 {
                     double t = p.X * dir.X + p.Y * dir.Y;
-                    perpSum += p.X * perp.X + p.Y * perp.Y;
-                    vertexCount++;
                     if (t < minT) minT = t;
                     if (t > maxT) maxT = t;
                 }
             }
 
-            double avgPerp = perpSum / vertexCount;
+            // Centerline (avgPerp) comes from openings only — openings are always
+            // aligned with the chain direction, so their perpendicular position is
+            // reliable. Stub/corner walls can extend far off the row and would
+            // skew the average.
+            double perpSum = 0;
+            int perpCount = 0;
+            foreach (var opening in chain.Openings)
+            {
+                foreach (var p in opening.Rect.Points.Take(4))
+                {
+                    perpSum += p.X * perp.X + p.Y * perp.Y;
+                    perpCount++;
+                }
+            }
+
+            double avgPerp = perpSum / perpCount;
             double rowThickness = chain.Openings.Average(o => o.Rect.Thickness2D);
 
             return new ChainBounds(minT, maxT, avgPerp, rowThickness, perp);
