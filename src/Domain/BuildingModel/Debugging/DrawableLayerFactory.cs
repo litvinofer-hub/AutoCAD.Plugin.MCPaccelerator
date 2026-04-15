@@ -62,14 +62,20 @@ namespace MCPAccelerator.Domain.BuildingModel.Debugging
         /// <summary>
         /// All axial lines for the given story, drawn as thin lines (no thickness).
         /// The label shows the axis symbol (A, B, 1, etc.).
+        ///
+        /// <see cref="AxialSystem"/> lives on the <see cref="Building"/> in
+        /// building space; lines are left in building space here so the debug
+        /// SVG sees the same coordinate frame as walls (also in building space).
+        /// Stories where <see cref="Story.HasCanvasOrigin"/> is false contribute
+        /// nothing — the shared system hasn't been mapped onto them yet.
         /// </summary>
         public static DrawableLayer AxialLines(Building building, Story story)
         {
             var elements = new List<DrawableElement>();
-            if (story.AxialSystem == null)
+            if (building.AxialSystem == null || !story.HasCanvasOrigin)
                 return new DrawableLayer("AxialLines", elements);
 
-            foreach (var direction in story.AxialSystem.Directions)
+            foreach (var direction in building.AxialSystem.Directions)
             {
                 foreach (var axialLine in direction.AxialLines)
                 {
@@ -86,10 +92,10 @@ namespace MCPAccelerator.Domain.BuildingModel.Debugging
         public static DrawableLayer AxialLines(Building building, Story story, Vec2 direction)
         {
             var elements = new List<DrawableElement>();
-            if (story.AxialSystem == null)
+            if (building.AxialSystem == null || !story.HasCanvasOrigin)
                 return new DrawableLayer("AxialLines", elements);
 
-            var dir = story.AxialSystem.FindDirection(direction);
+            var dir = building.AxialSystem.FindDirection(direction);
             if (dir == null)
                 return new DrawableLayer("AxialLines", elements);
 

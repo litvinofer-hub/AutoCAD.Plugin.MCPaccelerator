@@ -115,5 +115,109 @@ namespace MCPAccelerator.Tests.BuildingModel
             Assert.Same(mid, all[1]);
             Assert.Same(top, all[2]);
         }
+
+        // --- CanvasOrigin ---
+
+        [Fact]
+        public void CanvasOrigin_DefaultsToZero_AndIsUnset()
+        {
+            var story = new Story(_buildingId,
+                new Level(_buildingId, 0), new Level(_buildingId, 3));
+
+            Assert.Equal(0, story.CanvasOrigin.X);
+            Assert.Equal(0, story.CanvasOrigin.Y);
+            Assert.False(story.HasCanvasOrigin);
+        }
+
+        [Fact]
+        public void SetCanvasOrigin_MarksAsSet_AndStoresValue()
+        {
+            var story = new Story(_buildingId,
+                new Level(_buildingId, 0), new Level(_buildingId, 3));
+
+            story.SetCanvasOrigin(new Vec2(100, 50));
+
+            Assert.Equal(100, story.CanvasOrigin.X);
+            Assert.Equal(50, story.CanvasOrigin.Y);
+            Assert.True(story.HasCanvasOrigin);
+        }
+
+        [Fact]
+        public void ClearCanvasOrigin_ResetsToZero_AndUnsets()
+        {
+            var story = new Story(_buildingId,
+                new Level(_buildingId, 0), new Level(_buildingId, 3));
+            story.SetCanvasOrigin(new Vec2(100, 50));
+
+            story.ClearCanvasOrigin();
+
+            Assert.Equal(0, story.CanvasOrigin.X);
+            Assert.Equal(0, story.CanvasOrigin.Y);
+            Assert.False(story.HasCanvasOrigin);
+        }
+
+        [Fact]
+        public void CanvasToBuilding_SubtractsCanvasOrigin()
+        {
+            var story = new Story(_buildingId,
+                new Level(_buildingId, 0), new Level(_buildingId, 3));
+            story.SetCanvasOrigin(new Vec2(100, 50));
+
+            var (bx, by) = story.CanvasToBuilding(110, 55);
+
+            Assert.Equal(10, bx);
+            Assert.Equal(5, by);
+        }
+
+        [Fact]
+        public void BuildingToCanvas_AddsCanvasOrigin()
+        {
+            var story = new Story(_buildingId,
+                new Level(_buildingId, 0), new Level(_buildingId, 3));
+            story.SetCanvasOrigin(new Vec2(100, 50));
+
+            var (cx, cy) = story.BuildingToCanvas(10, 5);
+
+            Assert.Equal(110, cx);
+            Assert.Equal(55, cy);
+        }
+
+        [Fact]
+        public void CanvasToBuilding_RoundTrip()
+        {
+            var story = new Story(_buildingId,
+                new Level(_buildingId, 0), new Level(_buildingId, 3));
+            story.SetCanvasOrigin(new Vec2(42, -17));
+
+            var (bx, by) = story.CanvasToBuilding(123.45, 67.89);
+            var (cx, cy) = story.BuildingToCanvas(bx, by);
+
+            Assert.Equal(123.45, cx, 10);
+            Assert.Equal(67.89, cy, 10);
+        }
+    }
+
+    public class BuildingAxialSystemTests
+    {
+        [Fact]
+        public void AxialSystem_DefaultsToNull()
+        {
+            var building = new Building();
+            Assert.Null(building.AxialSystem);
+        }
+
+        [Fact]
+        public void SetAxialSystem_Stores_AndClearResets()
+        {
+            var building = new Building();
+            var sys = new AxialSystem(building.Id, bubbleRadius: 12);
+
+            building.SetAxialSystem(sys);
+            Assert.Same(sys, building.AxialSystem);
+            Assert.Equal(building.Id, sys.BuildingId);
+
+            building.ClearAxialSystem();
+            Assert.Null(building.AxialSystem);
+        }
     }
 }

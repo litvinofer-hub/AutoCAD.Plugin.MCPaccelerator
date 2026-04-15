@@ -5,6 +5,7 @@ using Autodesk.AutoCAD.Colors;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
+using MCPAccelerator.AutoCAD.AutoCADPlugin.Converter;
 using MCPAccelerator.AutoCAD.AutoCADPlugin.Prompts;
 using MCPAccelerator.AutoCAD.AutoCADPlugin.Utils;
 using MCPAccelerator.Domain.BuildingModel;
@@ -15,17 +16,28 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
     /// <summary>
     /// Orchestrates the OL_CREATE_AXIAL_SYSTEM command.
     ///
-    /// For the selected building and story:
-    /// 1. Finds walls parallel to a user-chosen direction.
-    /// 2. Deduplicates their perpendicular positions.
-    /// 3. Draws labeled axis lines (with bubbles) on the MCP_Axial_System layer.
-    /// 4. Builds domain objects: <see cref="AxialSystemDirection"/> with
-    ///    <see cref="AxialLine"/> items, added to the story's <see cref="AxialSystem"/>.
-    /// 5. Adds drawn ObjectIds to the story's <see cref="FloorPlanWorkingArea"/>
-    ///    and resizes the frame.
+    /// The axial system belongs to the <see cref="Building"/>, not a single
+    /// <see cref="Story"/> — the same grid is shared across every story, since
+    /// in real life the stories stack vertically and sit on the same grid. On
+    /// the 2D canvas, each story is offset; each story's
+    /// <see cref="Story.CanvasOrigin"/> records where building-space (0,0) sits
+    /// on its own floor plan.
     ///
-    /// If the story does not have an <see cref="AxialSystem"/> yet, one is created.
-    /// A direction parallel to an existing one in the same system is rejected.
+    /// For the <b>first direction</b> on a building:
+    /// 1. The user picks the grid A-1 anchor point on the source story — this
+    ///    defines the building origin and sets the source story's CanvasOrigin.
+    /// 2. The source story's walls are re-ingested so their stored coordinates
+    ///    move from canvas-space into building-space.
+    /// 3. A new <see cref="AxialSystem"/> is created on the Building.
+    ///
+    /// For <b>subsequent directions</b> (same building, new direction):
+    /// - No anchor pick — the building origin is already set.
+    /// - The existing <see cref="AxialSystem"/> gains one more
+    ///   <see cref="AxialSystemDirection"/>.
+    ///
+    /// Axis-line geometry is analyzed from walls in building space, stored in
+    /// <see cref="AxialLine.Line"/> in building space, and drawn on the canvas
+    /// at <c>story.BuildingToCanvas(...)</c>.
     /// </summary>
     public class CreateAxialSystemWorkflow
     {
@@ -36,7 +48,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
 
         public void Run()
         {
-            // 1. Pick building and story
+            // 1. Pick building and source story
             var context = BuildingContextPrompt.PickBuildingAndStory("axial system");
             if (context == null) return;
             var (building, story) = context.Value;
@@ -46,12 +58,12 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
             if (direction == null) return;
             Vec2 dir = Vec2Math.Normalize(direction.Value);
 
-            // 3. Check if this direction already exists in the story's axial system
-            if (story.AxialSystem != null &&
-                story.AxialSystem.FindDirection(dir) != null)
+            // 3. Reject duplicate direction
+            if (building.AxialSystem != null &&
+                building.AxialSystem.FindDirection(dir) != null)
             {
                 _editor.WriteMessage(
-                    "\nAn axial direction parallel to this vector already exists in this story.");
+                    "\nAn axial direction parallel to this vector already exists in this building.");
                 return;
             }
 
@@ -59,7 +71,34 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
             var symbolType = PromptSymbolType();
             if (symbolType == null) return;
 
-            // 5. Gather walls for this story
+            // 5. Look up working area (needed early so we know we can draw/refresh)
+            var workingAreas = BuildingSession.GetWorkingAreas(building);
+            var area = workingAreas?.FindByStory(story.Id);
+            if (area == null)
+            {
+                _editor.WriteMessage(
+                    "\nNo floor plan working area registered for this story. " +
+                    "Run OL_CREATE_FLOOR_PLAN_AREA first.");
+                return;
+            }
+
+            // 6. First direction: prompt for grid A-1 anchor, set CanvasOrigin,
+            //    re-ingest so existing walls are in building space.
+            bool isFirstDirection = building.AxialSystem == null;
+            if (isFirstDirection)
+            {
+                var anchor = PromptGridA1Anchor();
+                if (anchor == null) return;
+
+                story.SetCanvasOrigin(anchor.Value);
+                _editor.WriteMessage(
+                    $"\nGrid A-1 anchor set at canvas ({anchor.Value.X:0.##}, {anchor.Value.Y:0.##}). " +
+                    "Re-ingesting walls in building space...");
+
+                StoryReingestion.Reingest(building, story, area);
+            }
+
+            // 7. Gather walls for this story (now in building space)
             var storyWalls = building.Walls.Where(w => w.StoryId == story.Id).ToList();
             if (storyWalls.Count == 0)
             {
@@ -67,7 +106,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                 return;
             }
 
-            // 6. Filter walls parallel to chosen direction
+            // 8. Filter walls parallel to chosen direction
             var parallelWalls = FindParallelWalls(storyWalls, dir);
             if (parallelWalls.Count == 0)
             {
@@ -75,21 +114,23 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                 return;
             }
 
-            // 7. Unique perpendicular positions (deduplicated, sorted)
+            // 9. Unique perpendicular positions in BUILDING space, sorted
             var perpDir = Vec2Math.Perpendicular(dir);
             var positions = ComputeUniquePositions(parallelWalls, perpDir, building.Units);
 
-            // 8. Compute extent along direction (across ALL story walls) for line length
+            // 10. Compute extent along direction for line length (building space)
             var (minAlong, maxAlong) = ComputeExtentAlongDirection(storyWalls, dir);
             double span = maxAlong - minAlong;
             double margin = span * 0.15;
             if (margin < building.Units.LengthEpsilon) margin = 1.0;
 
-            double bubbleRadius = ComputeBubbleRadius(building.Units);
+            double bubbleRadius = isFirstDirection
+                ? ComputeBubbleRadius(building.Units)
+                : building.AxialSystem.BubbleRadius;
             double lineStart = minAlong - margin - bubbleRadius * 2;
             double lineEnd = maxAlong + margin + bubbleRadius * 2;
 
-            // 9. Build domain AxialLines + draw on canvas
+            // 11. Build domain AxialLines (coordinates in BUILDING space)
             var domainSymbolType = symbolType.Value switch
             {
                 SymbolType.Numbers   => AxisSymbolType.Numbers,
@@ -116,26 +157,39 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
 
             var axialDirection = new AxialSystemDirection(dir, domainSymbolType, axialLines);
 
-            // 10. Draw axes on canvas and collect ObjectIds per AxialLine
-            var idsPerLine = DrawAxes(axialLines, dir, bubbleRadius);
+            // 12. Ensure the building has an AxialSystem; add the new direction
+            if (isFirstDirection)
+                building.SetAxialSystem(new AxialSystem(building.Id, bubbleRadius));
+            building.AxialSystem.AddDirection(axialDirection);
 
-            // 11. Add direction to story's AxialSystem (create if needed)
-            if (story.AxialSystem == null)
-                story.SetAxialSystem(new AxialSystem(story.Id, bubbleRadius));
+            // 13. Draw on canvas at story's BuildingToCanvas(...) + collect ids per line
+            var idsPerLine = DrawAxes(axialLines, dir, bubbleRadius, story);
 
-            story.AxialSystem.AddDirection(axialDirection);
-
-            // 12. Add drawn ObjectIds to FloorPlanWorkingArea + map per AxialLine
-            var workingAreas = BuildingSession.GetWorkingAreas(building);
-            var area = workingAreas?.FindByStory(story.Id);
-            if (area != null)
+            // 14. Wire drawn entities into this story's working area
+            foreach (var (axialLine, ids) in idsPerLine)
             {
-                foreach (var (axialLine, ids) in idsPerLine)
+                area.SelectedObjectIds.AddRange(ids);
+                area.MapDomainElement(axialLine.Id, ids);
+            }
+            WorkingAreaFrameHelper.RedrawFrame(area);
+
+            // 15. If other stories are already registered with the axial system,
+            //     draw the new direction onto their FPWAs too.
+            foreach (var otherStory in building.Stories)
+            {
+                if (ReferenceEquals(otherStory, story)) continue;
+                if (!otherStory.HasCanvasOrigin) continue;
+
+                var otherArea = workingAreas.FindByStory(otherStory.Id);
+                if (otherArea == null) continue;
+
+                var otherIds = DrawAxes(axialLines, dir, bubbleRadius, otherStory);
+                foreach (var (axialLine, ids) in otherIds)
                 {
-                    area.SelectedObjectIds.AddRange(ids);
-                    area.MapDomainElement(axialLine.Id, ids);
+                    otherArea.SelectedObjectIds.AddRange(ids);
+                    otherArea.MapDomainElement(axialLine.Id, ids);
                 }
-                WorkingAreaFrameHelper.RedrawFrame(area);
+                WorkingAreaFrameHelper.RedrawFrame(otherArea);
             }
 
             _editor.WriteMessage(
@@ -145,6 +199,22 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
         // -------------------------------------------------------------------
         // Prompts
         // -------------------------------------------------------------------
+
+        private Vec2? PromptGridA1Anchor()
+        {
+            var options = new PromptPointOptions(
+                "\nPick the grid A-1 intersection point (will become building origin 0,0): ")
+            { AllowNone = false };
+
+            var result = _editor.GetPoint(options);
+            if (result.Status != PromptStatus.OK)
+            {
+                _editor.WriteMessage("\nCancelled.");
+                return null;
+            }
+
+            return new Vec2(result.Value.X, result.Value.Y);
+        }
 
         private Vec2? PromptDirection()
         {
@@ -229,7 +299,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
         }
 
         // -------------------------------------------------------------------
-        // Wall analysis
+        // Wall analysis (BUILDING space)
         // -------------------------------------------------------------------
 
         private static List<Wall> FindParallelWalls(List<Wall> walls, Vec2 direction)
@@ -290,16 +360,17 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
         }
 
         // -------------------------------------------------------------------
-        // Drawing
+        // Drawing — converts each AxialLine's building-space endpoints to
+        // canvas space using the given story's CanvasOrigin.
         // -------------------------------------------------------------------
 
         /// <summary>
-        /// Draws axis lines with bubbles using domain AxialLine geometry.
-        /// Returns a list of (AxialLine, ObjectIds) pairs so callers can
-        /// map each domain AxialLine to its drawn AutoCAD entities.
+        /// Draws axis lines with bubbles for <paramref name="story"/>.
+        /// Input <see cref="AxialLine"/>s are in <b>building</b> space;
+        /// this method converts to canvas space via <c>story.BuildingToCanvas</c>.
         /// </summary>
         private List<(AxialLine axialLine, List<ObjectId> ids)> DrawAxes(
-            List<AxialLine> axialLines, Vec2 dir, double bubbleRadius)
+            List<AxialLine> axialLines, Vec2 dir, double bubbleRadius, Story story)
         {
             var result = new List<(AxialLine, List<ObjectId>)>();
             var doc = AcadContext.Document;
@@ -319,12 +390,13 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                 {
                     var lineIds = new List<ObjectId>();
 
-                    var startPt = new Point3d(
-                        axialLine.Line.StartPoint.X,
-                        axialLine.Line.StartPoint.Y, 0);
-                    var endPt = new Point3d(
-                        axialLine.Line.EndPoint.X,
-                        axialLine.Line.EndPoint.Y, 0);
+                    var (sx, sy) = story.BuildingToCanvas(
+                        axialLine.Line.StartPoint.X, axialLine.Line.StartPoint.Y);
+                    var (ex, ey) = story.BuildingToCanvas(
+                        axialLine.Line.EndPoint.X, axialLine.Line.EndPoint.Y);
+
+                    var startPt = new Point3d(sx, sy, 0);
+                    var endPt = new Point3d(ex, ey, 0);
 
                     var bubbleStartPt = new Point3d(
                         startPt.X - dir.X * bubbleRadius,

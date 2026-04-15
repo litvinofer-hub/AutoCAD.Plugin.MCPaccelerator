@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using MCPAccelerator.AutoCAD.AutoCADPlugin.Utils;
@@ -9,15 +8,17 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
     /// <summary>
     /// Orchestrates the OL_CLEAR_AXIAL_SYSTEM command.
     ///
-    /// Erases all axial system entities across every building and story
-    /// in the current session — no user prompts required.
+    /// Erases every building-level axial system and every per-story canvas
+    /// origin in the current session — no user prompts required.
     ///
-    /// For each story that has an axial system:
-    /// 1. Finds axial-layer entities tracked in the <see cref="FloorPlanWorkingArea"/>.
-    /// 2. Erases them from the canvas.
-    /// 3. Removes those ObjectIds from the working area's SelectedObjectIds.
-    /// 4. Resizes the working-area bounding-box frame.
-    /// 5. Clears the <see cref="Domain.BuildingModel.AxialSystem"/> from the Story.
+    /// For each building with an <see cref="Domain.BuildingModel.AxialSystem"/>:
+    /// 1. For every story's <see cref="FloorPlanWorkingArea"/>:
+    ///    - Erases axial-layer entities tracked in the working area.
+    ///    - Removes their ObjectIds from SelectedObjectIds.
+    ///    - Redraws the bounding-box frame.
+    /// 2. Clears <see cref="Domain.BuildingModel.Building.AxialSystem"/>.
+    /// 3. Clears each story's <see cref="Domain.BuildingModel.Story.CanvasOrigin"/>
+    ///    (the origin loses its meaning once the shared system is gone).
     ///
     /// Also performs a fallback erase of any axial-layer entities not tracked
     /// in a working area (e.g. orphaned entities).
@@ -31,19 +32,17 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
         public void Run()
         {
             int totalErased = 0;
-            int storiesCleared = 0;
+            int buildingsCleared = 0;
 
             foreach (var (workingAreas, building) in BuildingSession.Entries)
             {
+                if (building.AxialSystem == null) continue;
+
                 foreach (var story in building.Stories)
                 {
-                    if (story.AxialSystem == null) continue;
-
                     var area = workingAreas.FindByStory(story.Id);
-
                     if (area != null)
                     {
-                        // Find and erase axial entities tracked in the working area
                         var axialIds = FindAxialObjectIds(area);
                         totalErased += EraseEntities(axialIds);
 
@@ -54,24 +53,25 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                             WorkingAreaFrameHelper.RedrawFrame(area);
                     }
 
-                    // Clear domain model
-                    story.ClearAxialSystem();
-                    storiesCleared++;
+                    story.ClearCanvasOrigin();
                 }
+
+                building.ClearAxialSystem();
+                buildingsCleared++;
             }
 
             // Fallback: erase any orphaned entities on the axial layer
             int orphaned = EraseAllOnAxialLayer();
             totalErased += orphaned;
 
-            if (totalErased == 0 && storiesCleared == 0)
+            if (totalErased == 0 && buildingsCleared == 0)
             {
                 _editor.WriteMessage("\nNo axial system entities to remove.");
                 return;
             }
 
             _editor.WriteMessage(
-                $"\nCleared axial systems from {storiesCleared} story(ies). " +
+                $"\nCleared axial system from {buildingsCleared} building(s). " +
                 $"Removed {totalErased} entity(ies) total.");
         }
 

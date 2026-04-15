@@ -113,15 +113,21 @@ namespace MCPAccelerator.Domain.BuildingModel
     }
 
     /// <summary>
-    /// The axial system for a single <see cref="Story"/>. Contains one or more
+    /// The axial system for a <see cref="Building"/>. Contains one or more
     /// <see cref="AxialSystemDirection"/> instances (e.g. X-direction and
     /// Y-direction axes). Two directions with the same (or parallel) vector
     /// are not allowed in the same system.
+    ///
+    /// All <see cref="AxialLine"/> coordinates are in <b>building space</b>
+    /// (not canvas space). Each <see cref="Story"/> that shares the system
+    /// maps building space to its own canvas layout via <c>Story.CanvasOrigin</c>.
+    /// The convention is that grid A-1 sits at building origin (0,0,0) — the
+    /// anchor picked by the user when the system is first created.
     /// </summary>
     public class AxialSystem
     {
         public Guid Id { get; } = Guid.NewGuid();
-        public Guid StoryId { get; }
+        public Guid BuildingId { get; }
 
         /// <summary>
         /// Directions in this axial system. Each direction holds its own
@@ -133,9 +139,9 @@ namespace MCPAccelerator.Domain.BuildingModel
         /// <summary>Radius of the bubble circles at each end of every axis line.</summary>
         public double BubbleRadius { get; }
 
-        public AxialSystem(Guid storyId, double bubbleRadius)
+        public AxialSystem(Guid buildingId, double bubbleRadius)
         {
-            StoryId = storyId;
+            BuildingId = buildingId;
             BubbleRadius = bubbleRadius;
         }
 

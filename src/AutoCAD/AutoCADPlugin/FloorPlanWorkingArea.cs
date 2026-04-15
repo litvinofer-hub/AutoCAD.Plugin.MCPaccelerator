@@ -68,6 +68,22 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin
         public void ClearDomainMap() => _domainToAcad.Clear();
 
         /// <summary>
+        /// Clears every mapping except entries whose domain Guid is in
+        /// <paramref name="keep"/>. Used by story reingestion to drop stale
+        /// wall/opening entries while preserving the building's shared
+        /// axial-line mappings.
+        /// </summary>
+        public void ClearDomainMapExcept(System.Collections.Generic.IEnumerable<Guid> keep)
+        {
+            var keepSet = new System.Collections.Generic.HashSet<Guid>(keep);
+            var toRemove = new System.Collections.Generic.List<Guid>();
+            foreach (var key in _domainToAcad.Keys)
+                if (!keepSet.Contains(key)) toRemove.Add(key);
+            foreach (var key in toRemove)
+                _domainToAcad.Remove(key);
+        }
+
+        /// <summary>
         /// Registers a link from a domain element to one source AutoCAD entity.
         /// </summary>
         public void MapDomainElement(Guid domainElementId, ObjectId sourceObjectId)

@@ -41,6 +41,10 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin
         [CommandMethod("OL_CREATE_AXIAL_SYSTEM")]
         public static void CreateAxialSystem() => new CreateAxialSystemWorkflow().Run();
 
+        [CommandMethod("OL_REGISTER_STORY_WITH_AXIAL_SYSTEM")]
+        public static void RegisterStoryWithAxialSystem()
+            => new RegisterStoryWithAxialSystemWorkflow().Run();
+
         [CommandMethod("OL_DELETE_AXIAL_LINE")]
         public static void DeleteAxialLine() => new DeleteAxialLineWorkflow().Run();
 

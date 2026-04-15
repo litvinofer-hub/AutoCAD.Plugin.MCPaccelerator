@@ -28,6 +28,21 @@ namespace MCPAccelerator.Domain.BuildingModel
         public IReadOnlyList<Room> Rooms => _rooms.AsReadOnly();
         public IReadOnlyList<Wall> Walls => _walls.AsReadOnly();
 
+        /// <summary>
+        /// The building-wide axial system (shared across all stories). All its
+        /// <see cref="AxialLine"/> coordinates are in building space. Each
+        /// <see cref="Story"/> that participates sets its own
+        /// <see cref="Story.CanvasOrigin"/> to position the shared system on
+        /// that story's floor plan in the 2D canvas.
+        /// </summary>
+        public AxialSystem AxialSystem { get; private set; }
+
+        /// <summary>Sets the building's axial system.</summary>
+        public void SetAxialSystem(AxialSystem axialSystem) => AxialSystem = axialSystem;
+
+        /// <summary>Clears the axial system from the building.</summary>
+        public void ClearAxialSystem() => AxialSystem = null;
+
         // --- Shared instance management ---
 
         /// <summary>

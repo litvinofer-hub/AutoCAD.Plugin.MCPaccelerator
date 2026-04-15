@@ -113,6 +113,12 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Converter
         /// the building's <see cref="UnitSystem"/> defaults — floor plans carry no
         /// vertical information. Failures are caught per opening and counted in
         /// <see cref="FloorPlanResult.OpeningsSkipped"/>.
+        ///
+        /// Converted coordinates are in <b>canvas space</b> (as read from AutoCAD).
+        /// This method transforms them into <b>building space</b> using the story's
+        /// <see cref="Story.CanvasOrigin"/> before handing them to the building —
+        /// so everything persisted in the <see cref="Building"/> is in real-world
+        /// coordinates relative to the building origin (grid A-1).
         /// </summary>
         public static FloorPlanResult Apply(Building building, Story story, List<ConvertedWall> converted)
         {
@@ -122,22 +128,28 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Converter
 
             foreach (var cw in converted)
             {
-                var wall = building.AddWall(cw.X1, cw.Y1, cw.X2, cw.Y2, story, cw.Thickness);
+                var (wx1, wy1) = story.CanvasToBuilding(cw.X1, cw.Y1);
+                var (wx2, wy2) = story.CanvasToBuilding(cw.X2, cw.Y2);
+
+                var wall = building.AddWall(wx1, wy1, wx2, wy2, story, cw.Thickness);
                 result.WallsCreated++;
 
                 foreach (var co in cw.Openings)
                 {
                     try
                     {
+                        var (ox1, oy1) = story.CanvasToBuilding(co.X1, co.Y1);
+                        var (ox2, oy2) = story.CanvasToBuilding(co.X2, co.Y2);
+
                         switch (co.Type)
                         {
                             case ElementType.Window:
-                                building.AddWindow(wall, co.X1, co.Y1, co.X2, co.Y2,
+                                building.AddWindow(wall, ox1, oy1, ox2, oy2,
                                     botZ + units.DefaultWindowSillHeight, units.DefaultWindowHeight);
                                 result.WindowsCreated++;
                                 break;
                             case ElementType.Door:
-                                building.AddDoor(wall, co.X1, co.Y1, co.X2, co.Y2,
+                                building.AddDoor(wall, ox1, oy1, ox2, oy2,
                                     botZ + units.DefaultDoorSillHeight, units.DefaultDoorHeight);
                                 result.DoorsCreated++;
                                 break;

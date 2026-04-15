@@ -1,13 +1,10 @@
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
 using MCPAccelerator.AutoCAD.AutoCADPlugin.Converter;
-using MCPAccelerator.AutoCAD.AutoCADPlugin.Selection;
 using MCPAccelerator.AutoCAD.AutoCADPlugin.Utils;
-using MCPAccelerator.Domain.BuildingModel;
 
 namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
 {
@@ -62,39 +59,8 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                     if (insideIds.Count > 0)
                         WorkingAreaFrameHelper.RedrawFrame(area);
 
-                    // --- 4. Remove old domain walls for this story ---
-                    RemoveStoryWalls(building, story.Id);
-                    area.ClearDomainMap();
-
-                    // --- 5. Filter → classify → convert ---
-                    var raw = new RawSelection();
-                    foreach (var id in area.SelectedObjectIds)
-                        raw.ObjectIds.Add(id);
-
-                    var closedPolylines = FloorPlanSelection.FilterClosedPolylines(raw);
-                    if (closedPolylines.Count == 0)
-                    {
-                        _editor.WriteMessage($"\n  No closed polylines found.");
-                        areasRefreshed++;
-                        continue;
-                    }
-
-                    var classified = FloorPlanSelection.Classify(closedPolylines);
-                    if (classified.Total == 0)
-                    {
-                        _editor.WriteMessage($"\n  No wall/window/door polylines after classification.");
-                        areasRefreshed++;
-                        continue;
-                    }
-
-                    var converted = FloorPlanConverter.Convert(
-                        classified.Walls, classified.Windows, classified.Doors,
-                        building.Units.LengthEpsilon);
-
-                    var result = FloorPlanConverter.Apply(building, story, converted);
-
-                    // --- 6. Re-map domain IDs ---
-                    MapDomainElementIds(building, story, raw, area);
+                    // --- 4. Re-ingest this story's floor plan ---
+                    var result = StoryReingestion.Reingest(building, story, area);
 
                     _editor.WriteMessage(
                         $"\n  Rebuilt: {result.WallsCreated} wall(s), " +
@@ -173,33 +139,6 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
         // -------------------------------------------------------------------
         // Helpers
         // -------------------------------------------------------------------
-
-        private static void RemoveStoryWalls(Building building, Guid storyId)
-        {
-            var wallsToRemove = building.Walls
-                .Where(w => w.StoryId == storyId)
-                .ToList();
-
-            foreach (var wall in wallsToRemove)
-                building.RemoveWall(wall);
-        }
-
-        private static void MapDomainElementIds(
-            Building building, Story story,
-            RawSelection raw, FloorPlanWorkingArea workingArea)
-        {
-            var storyWalls = building.Walls
-                .Where(w => w.StoryId == story.Id)
-                .ToList();
-
-            foreach (var wall in storyWalls)
-            {
-                workingArea.MapDomainElement(wall.Id, raw.ObjectIds);
-
-                foreach (var opening in wall.Openings)
-                    workingArea.MapDomainElement(opening.Id, raw.ObjectIds);
-            }
-        }
 
         /// <summary>
         /// Returns true if any entities exist on the MCP_3D_* layers,

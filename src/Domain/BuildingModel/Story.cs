@@ -26,17 +26,51 @@ namespace MCPAccelerator.Domain.BuildingModel
         public double Height => TopLevel.Elevation - BotLevel.Elevation;
 
         /// <summary>
-        /// The axial system for this story. A story has at most one
-        /// <see cref="AxialSystem"/>, which itself contains one or more
-        /// <see cref="AxialSystemDirection"/> instances.
+        /// Where this story's building-space origin (grid A-1 intersection;
+        /// building coord 0,0) sits on the 2D AutoCAD canvas. This is how the
+        /// building-wide <see cref="AxialSystem"/> is mapped onto each story's
+        /// floor plan when stories are laid out side-by-side on the canvas.
+        ///
+        /// Defaults to (0,0) and <see cref="HasCanvasOrigin"/> = false. Becomes
+        /// set when the user creates the axial system on this story, or
+        /// registers this story against an existing axial system by picking
+        /// matched reference points.
         /// </summary>
-        public AxialSystem AxialSystem { get; private set; }
+        public Vec2 CanvasOrigin { get; private set; } = Vec2.Zero;
 
-        /// <summary>Sets the axial system for this story.</summary>
-        public void SetAxialSystem(AxialSystem axialSystem) => AxialSystem = axialSystem;
+        /// <summary>True once <see cref="CanvasOrigin"/> has been explicitly set.</summary>
+        public bool HasCanvasOrigin { get; private set; }
 
-        /// <summary>Removes the axial system from this story.</summary>
-        public void ClearAxialSystem() => AxialSystem = null;
+        /// <summary>
+        /// Sets this story's canvas origin — the canvas point that represents
+        /// building-space (0,0,<see cref="BotLevel"/>.Elevation).
+        /// </summary>
+        public void SetCanvasOrigin(Vec2 canvasOrigin)
+        {
+            CanvasOrigin = canvasOrigin;
+            HasCanvasOrigin = true;
+        }
+
+        /// <summary>Clears this story's canvas origin back to (0,0), unset.</summary>
+        public void ClearCanvasOrigin()
+        {
+            CanvasOrigin = Vec2.Zero;
+            HasCanvasOrigin = false;
+        }
+
+        /// <summary>
+        /// Converts a canvas-space 2D point (as drawn in AutoCAD) to a
+        /// building-space 2D coordinate by subtracting <see cref="CanvasOrigin"/>.
+        /// </summary>
+        public (double x, double y) CanvasToBuilding(double canvasX, double canvasY)
+            => (canvasX - CanvasOrigin.X, canvasY - CanvasOrigin.Y);
+
+        /// <summary>
+        /// Converts a building-space 2D coordinate to canvas space by adding
+        /// <see cref="CanvasOrigin"/>.
+        /// </summary>
+        public (double x, double y) BuildingToCanvas(double buildingX, double buildingY)
+            => (buildingX + CanvasOrigin.X, buildingY + CanvasOrigin.Y);
 
         /// <summary>
         /// Returns all levels in order: BotLevel, intermediate levels, TopLevel.
