@@ -22,21 +22,32 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
     /// <see cref="Story.CanvasOrigin"/> records where building-space (0,0) sits
     /// on its own floor plan.
     ///
-    /// For the <b>first direction</b> on a building:
-    /// 1. The user picks the grid A-1 anchor point on the source story — this
-    ///    defines the building origin and sets the source story's CanvasOrigin.
-    /// 2. The source story's walls are re-ingested so their stored coordinates
-    ///    move from canvas-space into building-space.
-    /// 3. A new <see cref="AxialSystem"/> is created on the Building.
+    /// The command creates the whole axial system in one shot — there is no
+    /// "add one more direction" flow. If a system already exists on the
+    /// building, the user must run OL_CLEAR_AXIAL_SYSTEM first.
     ///
-    /// For <b>subsequent directions</b> (same building, new direction):
-    /// - No anchor pick — the building origin is already set.
-    /// - The existing <see cref="AxialSystem"/> gains one more
-    ///   <see cref="AxialSystemDirection"/>.
+    /// Flow:
+    /// 1. User supplies the number of axial directions (N ≥ 2).
+    /// 2. For each direction i = 1..N, user picks direction (X/Y/Other) and
+    ///    symbol type (Numbers/Lowercase/Uppercase). A direction parallel to
+    ///    any already picked one is rejected up front.
+    /// 3. Wall analysis runs in <b>canvas space</b> (walls aren't reingested
+    ///    yet) to produce each direction's axis-line positions.
+    /// 4. The building origin is <b>derived</b> — it's the intersection of the
+    ///    first axis line of direction 1 with the first axis line of direction
+    ///    2. With UpperCase × Numbers this intersection is the conventional
+    ///    "A-1" point; with other symbol choices it's the equivalent first-line
+    ///    intersection.
+    /// 5. <see cref="Story.CanvasOrigin"/> is set to that derived anchor, the
+    ///    source story's walls are re-ingested into building space, and every
+    ///    axis line is translated from canvas space into building space
+    ///    (subtract the anchor).
+    /// 6. A new <see cref="AxialSystem"/> is created on the Building with all
+    ///    N directions, drawn on the source FPWA, and propagated to any other
+    ///    story that is already registered.
     ///
-    /// Axis-line geometry is analyzed from walls in building space, stored in
-    /// <see cref="AxialLine.Line"/> in building space, and drawn on the canvas
-    /// at <c>story.BuildingToCanvas(...)</c>.
+    /// Axis-line geometry is stored in <see cref="AxialLine.Line"/> in building
+    /// space, and drawn on the canvas at <c>story.BuildingToCanvas(...)</c>.
     /// </summary>
     public class CreateAxialSystemWorkflow
     {
@@ -49,25 +60,16 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
             if (context == null) return;
             var (building, story) = context.Value;
 
-            // 2. Pick direction
-            var direction = PromptDirection();
-            if (direction == null) return;
-            Vec2 dir = Vec2Math.Normalize(direction.Value);
-
-            // 3. Reject duplicate direction
-            if (building.AxialSystem != null &&
-                building.AxialSystem.FindDirection(dir) != null)
+            // 2. Refuse if an axial system already exists — "create once or clear all".
+            if (building.AxialSystem != null)
             {
                 _editor.WriteMessage(
-                    "\nAn axial direction parallel to this vector already exists in this building.");
+                    "\nBuilding already has an axial system. " +
+                    "Run OL_CLEAR_AXIAL_SYSTEM to delete it first.");
                 return;
             }
 
-            // 4. Pick symbol type
-            var symbolType = PromptSymbolType();
-            if (symbolType == null) return;
-
-            // 5. Look up working area (needed early so we know we can draw/refresh)
+            // 3. Look up working area (needed early so we know we can draw/refresh)
             var workingAreas = BuildingSession.GetWorkingAreas(building);
             var area = workingAreas?.FindByStory(story.Id);
             if (area == null)
@@ -78,23 +80,37 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                 return;
             }
 
-            // 6. First direction: prompt for grid A-1 anchor, set CanvasOrigin,
-            //    re-ingest so existing walls are in building space.
-            bool isFirstDirection = building.AxialSystem == null;
-            if (isFirstDirection)
+            // 4. How many directions?
+            int? countResult = PromptDirectionCount();
+            if (countResult == null) return;
+            int directionCount = countResult.Value;
+
+            // 5. Pick (direction, symbol type) for each. Reject a direction
+            //    parallel to any already-picked one.
+            var specs = new List<(Vec2 dir, SymbolType symbolType)>();
+            while (specs.Count < directionCount)
             {
-                var anchor = PromptGridA1Anchor();
-                if (anchor == null) return;
+                _editor.WriteMessage($"\n--- Direction {specs.Count + 1} of {directionCount} ---");
 
-                story.SetCanvasOrigin(anchor.Value);
-                _editor.WriteMessage(
-                    $"\nGrid A-1 anchor set at canvas ({anchor.Value.X:0.##}, {anchor.Value.Y:0.##}). " +
-                    "Re-ingesting walls in building space...");
+                var directionRes = PromptDirection();
+                if (directionRes == null) return;
+                var dir = Vec2Math.Normalize(directionRes.Value);
 
-                StoryReingestion.Reingest(building, story, area);
+                if (IsParallelToAny(dir, specs))
+                {
+                    _editor.WriteMessage(
+                        "\nThis direction is parallel to a previously picked direction. " +
+                        "Pick a non-parallel direction.");
+                    continue;
+                }
+
+                var sym = PromptSymbolType();
+                if (sym == null) return;
+
+                specs.Add((dir, sym.Value));
             }
 
-            // 7. Gather walls for this story (now in building space)
+            // 6. Gather this story's walls — still in CANVAS space (no reingest yet).
             var storyWalls = building.Walls.Where(w => w.StoryId == story.Id).ToList();
             if (storyWalls.Count == 0)
             {
@@ -102,75 +118,110 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                 return;
             }
 
-            // 8. Filter walls parallel to chosen direction
-            var parallelWalls = FindParallelWalls(storyWalls, dir);
-            if (parallelWalls.Count == 0)
+            // 7. For each direction, analyze walls (in canvas space) and build
+            //    its axis lines (also in canvas space for now).
+            double bubbleRadius = ComputeBubbleRadius(building.Units);
+            var perDirection = new List<(Vec2 dir, AxisSymbolType symbol, List<AxialLine> canvasLines)>();
+
+            foreach (var (dir, symbolType) in specs)
             {
-                _editor.WriteMessage("\nNo walls found parallel to the chosen direction.");
+                var parallelWalls = FindParallelWalls(storyWalls, dir);
+                if (parallelWalls.Count == 0)
+                {
+                    _editor.WriteMessage(
+                        $"\nDirection ({dir.X:0.##}, {dir.Y:0.##}) has no parallel walls — cannot place axes.");
+                    return;
+                }
+
+                var perpDir = Vec2Math.Perpendicular(dir);
+                var positions = ComputeUniquePositions(parallelWalls, perpDir, building.Units);
+                var (minAlong, maxAlong) = ComputeExtentAlongDirection(storyWalls, dir);
+                double span = maxAlong - minAlong;
+                double margin = span * 0.15;
+                if (margin < building.Units.LengthEpsilon) margin = 1.0;
+
+                double lineStart = minAlong - margin - bubbleRadius * 2;
+                double lineEnd   = maxAlong + margin + bubbleRadius * 2;
+
+                var domainSymbolType = symbolType switch
+                {
+                    SymbolType.Numbers   => AxisSymbolType.Numbers,
+                    SymbolType.LowerCase => AxisSymbolType.LowerCase,
+                    SymbolType.UpperCase => AxisSymbolType.UpperCase,
+                    _                    => AxisSymbolType.Numbers
+                };
+
+                var canvasLines = new List<AxialLine>();
+                for (int i = 0; i < positions.Count; i++)
+                {
+                    double perpPos = positions[i];
+                    string symbol = GetSymbol(i, symbolType);
+
+                    var startPt = new Point(
+                        perpPos * perpDir.X + lineStart * dir.X,
+                        perpPos * perpDir.Y + lineStart * dir.Y, 0);
+                    var endPt = new Point(
+                        perpPos * perpDir.X + lineEnd * dir.X,
+                        perpPos * perpDir.Y + lineEnd * dir.Y, 0);
+
+                    canvasLines.Add(new AxialLine(symbol, new LineSegment(startPt, endPt)));
+                }
+
+                perDirection.Add((dir, domainSymbolType, canvasLines));
+            }
+
+            // 8. Derive the canvas anchor from the intersection of the first
+            //    axis lines of directions 1 and 2. With UpperCase × Numbers
+            //    this is the "A-1" point.
+            var anchorResult = IntersectFirstLines(perDirection[0], perDirection[1]);
+            if (anchorResult == null)
+            {
+                // Guarded against earlier by the parallel-direction rejection,
+                // but keep a defensive message in case of degenerate geometry.
+                _editor.WriteMessage(
+                    "\nFailed to compute origin from the first axis lines (directions are parallel).");
                 return;
             }
+            Vec2 anchor = anchorResult.Value;
 
-            // 9. Unique perpendicular positions in BUILDING space, sorted
-            var perpDir = Vec2Math.Perpendicular(dir);
-            var positions = ComputeUniquePositions(parallelWalls, perpDir, building.Units);
+            _editor.WriteMessage(
+                $"\nBuilding origin set at canvas ({anchor.X:0.##}, {anchor.Y:0.##}). " +
+                "Re-ingesting walls in building space...");
 
-            // 10. Compute extent along direction for line length (building space)
-            var (minAlong, maxAlong) = ComputeExtentAlongDirection(storyWalls, dir);
-            double span = maxAlong - minAlong;
-            double margin = span * 0.15;
-            if (margin < building.Units.LengthEpsilon) margin = 1.0;
+            // 9. Commit: set canvas origin, reingest walls, translate every
+            //    collected axis line from canvas space into building space.
+            story.SetCanvasOrigin(anchor);
+            StoryReingestion.Reingest(building, story, area);
 
-            double bubbleRadius = isFirstDirection
-                ? ComputeBubbleRadius(building.Units)
-                : building.AxialSystem.BubbleRadius;
-            double lineStart = minAlong - margin - bubbleRadius * 2;
-            double lineEnd = maxAlong + margin + bubbleRadius * 2;
-
-            // 11. Build domain AxialLines (coordinates in BUILDING space)
-            var domainSymbolType = symbolType.Value switch
+            for (int i = 0; i < perDirection.Count; i++)
             {
-                SymbolType.Numbers   => AxisSymbolType.Numbers,
-                SymbolType.LowerCase => AxisSymbolType.LowerCase,
-                SymbolType.UpperCase => AxisSymbolType.UpperCase,
-                _                    => AxisSymbolType.Numbers
-            };
-
-            var axialLines = new List<AxialLine>();
-            for (int i = 0; i < positions.Count; i++)
-            {
-                double perpPos = positions[i];
-                string symbol = GetSymbol(i, symbolType.Value);
-
-                var startPt = new Point(
-                    perpPos * perpDir.X + lineStart * dir.X,
-                    perpPos * perpDir.Y + lineStart * dir.Y, 0);
-                var endPt = new Point(
-                    perpPos * perpDir.X + lineEnd * dir.X,
-                    perpPos * perpDir.Y + lineEnd * dir.Y, 0);
-
-                axialLines.Add(new AxialLine(symbol, new LineSegment(startPt, endPt)));
+                var (dir, symbol, canvasLines) = perDirection[i];
+                var buildingLines = TranslateLinesToBuildingSpace(canvasLines, anchor);
+                perDirection[i] = (dir, symbol, buildingLines);
             }
 
-            var axialDirection = new AxialSystemDirection(dir, domainSymbolType, axialLines);
+            // 10. Build and install the AxialSystem.
+            var axialSystem = new AxialSystem(building.Id, bubbleRadius);
+            foreach (var (dir, symbol, lines) in perDirection)
+                axialSystem.AddDirection(new AxialSystemDirection(dir, symbol, lines));
+            building.SetAxialSystem(axialSystem);
 
-            // 12. Ensure the building has an AxialSystem; add the new direction
-            if (isFirstDirection)
-                building.SetAxialSystem(new AxialSystem(building.Id, bubbleRadius));
-            building.AxialSystem.AddDirection(axialDirection);
-
-            // 13. Draw on canvas at story's BuildingToCanvas(...) + collect ids per line
-            var idsPerLine = DrawAxes(axialLines, dir, bubbleRadius, story);
-
-            // 14. Wire drawn entities into this story's working area
-            foreach (var (axialLine, ids) in idsPerLine)
+            // 11. Draw all axes on the source FPWA and record mappings.
+            int totalLines = 0;
+            foreach (var (dir, _, lines) in perDirection)
             {
-                area.SelectedObjectIds.AddRange(ids);
-                area.MapDomainElement(axialLine.Id, ids);
+                var idsPerLine = DrawAxes(lines, dir, bubbleRadius, story);
+                foreach (var (axialLine, ids) in idsPerLine)
+                {
+                    area.SelectedObjectIds.AddRange(ids);
+                    area.MapDomainElement(axialLine.Id, ids);
+                }
+                totalLines += lines.Count;
             }
             WorkingAreaFrameHelper.RedrawFrame(area);
 
-            // 15. If other stories are already registered with the axial system,
-            //     draw the new direction onto their FPWAs too.
+            // 12. Propagate to other already-registered stories (defensive —
+            //     with the "clear first" rule this is normally unreachable).
             foreach (var otherStory in building.Stories)
             {
                 if (ReferenceEquals(otherStory, story)) continue;
@@ -179,37 +230,113 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                 var otherArea = workingAreas.FindByStory(otherStory.Id);
                 if (otherArea == null) continue;
 
-                var otherIds = DrawAxes(axialLines, dir, bubbleRadius, otherStory);
-                foreach (var (axialLine, ids) in otherIds)
+                foreach (var (dir, _, lines) in perDirection)
                 {
-                    otherArea.SelectedObjectIds.AddRange(ids);
-                    otherArea.MapDomainElement(axialLine.Id, ids);
+                    var otherIds = DrawAxes(lines, dir, bubbleRadius, otherStory);
+                    foreach (var (axialLine, ids) in otherIds)
+                    {
+                        otherArea.SelectedObjectIds.AddRange(ids);
+                        otherArea.MapDomainElement(axialLine.Id, ids);
+                    }
                 }
                 WorkingAreaFrameHelper.RedrawFrame(otherArea);
             }
 
             _editor.WriteMessage(
-                $"\nCreated {axialLines.Count} axial axis/axes on layer '{McpLayers.Axes}'.");
+                $"\nCreated axial system with {perDirection.Count} direction(s) and " +
+                $"{totalLines} axis line(s) on layer '{McpLayers.Axes}'.");
         }
 
         // -------------------------------------------------------------------
         // Prompts
         // -------------------------------------------------------------------
 
-        private Vec2? PromptGridA1Anchor()
+        private int? PromptDirectionCount()
         {
-            var options = new PromptPointOptions(
-                "\nPick the grid A-1 intersection point (will become building origin 0,0): ")
-            { AllowNone = false };
+            var options = new PromptIntegerOptions(
+                "\nHow many axial directions do you want? (minimum 2): ")
+            {
+                AllowNone = false,
+                AllowNegative = false,
+                AllowZero = false,
+                LowerLimit = 2
+            };
 
-            var result = _editor.GetPoint(options);
+            var result = _editor.GetInteger(options);
             if (result.Status != PromptStatus.OK)
             {
                 _editor.WriteMessage("\nCancelled.");
                 return null;
             }
 
-            return new Vec2(result.Value.X, result.Value.Y);
+            return result.Value;
+        }
+
+        /// <summary>
+        /// True if <paramref name="dir"/> is parallel (same or opposite) to any
+        /// direction already collected in <paramref name="specs"/>.
+        /// </summary>
+        private static bool IsParallelToAny(Vec2 dir,
+            List<(Vec2 dir, SymbolType symbolType)> specs)
+        {
+            foreach (var (existing, _) in specs)
+            {
+                double cross = existing.X * dir.Y - existing.Y * dir.X;
+                if (GeometrySettings.AreEqual(cross, 0))
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Intersects the first axis line of <paramref name="d1"/> with the
+        /// first axis line of <paramref name="d2"/>, treating both as infinite
+        /// lines through their stored endpoints. Returns null if the lines are
+        /// parallel.
+        /// </summary>
+        private static Vec2? IntersectFirstLines(
+            (Vec2 dir, AxisSymbolType symbol, List<AxialLine> canvasLines) d1,
+            (Vec2 dir, AxisSymbolType symbol, List<AxialLine> canvasLines) d2)
+        {
+            if (d1.canvasLines.Count == 0 || d2.canvasLines.Count == 0)
+                return null;
+
+            var p1 = new Vec2(
+                d1.canvasLines[0].Line.StartPoint.X,
+                d1.canvasLines[0].Line.StartPoint.Y);
+            var p2 = new Vec2(
+                d2.canvasLines[0].Line.StartPoint.X,
+                d2.canvasLines[0].Line.StartPoint.Y);
+
+            double cross = d1.dir.X * d2.dir.Y - d1.dir.Y * d2.dir.X;
+            if (GeometrySettings.AreEqual(cross, 0))
+                return null;
+
+            // Solve p1 + t * d1.dir = p2 + s * d2.dir for t.
+            var dp = Vec2Math.Subtract(p2, p1);
+            double t = (dp.X * d2.dir.Y - dp.Y * d2.dir.X) / cross;
+
+            return new Vec2(p1.X + t * d1.dir.X, p1.Y + t * d1.dir.Y);
+        }
+
+        /// <summary>
+        /// Returns a new list of <see cref="AxialLine"/>s whose endpoints have
+        /// <paramref name="anchor"/> subtracted — converting canvas-space
+        /// coordinates into building-space coordinates.
+        /// </summary>
+        private static List<AxialLine> TranslateLinesToBuildingSpace(
+            List<AxialLine> canvasLines, Vec2 anchor)
+        {
+            var result = new List<AxialLine>(canvasLines.Count);
+            foreach (var line in canvasLines)
+            {
+                var s = line.Line.StartPoint;
+                var e = line.Line.EndPoint;
+                var newStart = new Point(s.X - anchor.X, s.Y - anchor.Y, s.Z);
+                var newEnd   = new Point(e.X - anchor.X, e.Y - anchor.Y, e.Z);
+                result.Add(new AxialLine(line.Symbol, new LineSegment(newStart, newEnd)));
+            }
+            return result;
         }
 
         private Vec2? PromptDirection()

@@ -61,7 +61,9 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
 
             // 2. Pick the source point (must fall inside a FPWA whose story has CanvasOrigin)
             var sourcePickRes = _editor.GetPoint(new PromptPointOptions(
-                "\nPick a reference point on the source floor plan (e.g. grid A-1): ")
+                "\nPick any recognizable point on the source floor plan " +
+                "(e.g. a grid bubble or building corner). " +
+                "You'll pick the same point on each target floor plan next: ")
             { AllowNone = false });
             if (sourcePickRes.Status != PromptStatus.OK)
             {
