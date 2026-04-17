@@ -24,6 +24,11 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
     /// </list>
     /// Walls, windows, and doors each go on their own layer (created on demand).
     /// Only X/Y are used — the drawing is pure 2D, Z is dropped.
+    ///
+    /// The picked centers and the ObjectIds of the drawn entities are stored in
+    /// <see cref="PrintBuildingRegistry"/> so that OL_REFRESH can redraw the
+    /// floor plan automatically after the underlying model changes. See
+    /// <see cref="ReprintAll"/>.
     /// </summary>
     public class PrintBuildingWorkflow
     {
@@ -33,6 +38,13 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
         {
             var building = BuildingContextPrompt.PickBuilding("print");
             if (building == null) return;
+
+            // Starting a fresh print pass: erase any previously printed geometry
+            // for this building and reset the remembered centers.
+            var entry = PrintBuildingRegistry.GetOrCreate(building);
+            EraseEntities(entry.DrawnEntityIds);
+            entry.DrawnEntityIds.Clear();
+            entry.StoryCenters.Clear();
 
             // Walls know their story directly (Building.AddWall enforces StoryId).
             // A simple GroupBy is all we need — no elevation lookups at the print site.
@@ -58,15 +70,94 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                 var picked = PromptStoryCenter(i + 1, story.Name);
                 if (picked == null) return; // user cancelled
 
+                entry.StoryCenters[story.Id] = picked.Value;
+
                 double dx = picked.Value.X - cx;
                 double dy = picked.Value.Y - cy;
 
-                DrawStory(storyWalls, dx, dy, totals);
+                DrawStory(storyWalls, dx, dy, totals, entry.DrawnEntityIds);
             }
 
             _editor.WriteMessage(
                 $"\nPrinted '{building.Name}': {totals.SubWalls} sub-wall(s), " +
                 $"{totals.Windows} window(s), {totals.Doors} door(s).");
+        }
+
+        // -------------------------------------------------------------------
+        // Reprint (called by OL_REFRESH)
+        // -------------------------------------------------------------------
+
+        /// <summary>
+        /// Redraws every building recorded in <see cref="PrintBuildingRegistry"/>,
+        /// reusing the story centers picked originally. Each building is erased
+        /// first (its previously-drawn entities) before being drawn again. No
+        /// prompts are shown — this is silent replay.
+        ///
+        /// Buildings whose Id no longer resolves in <see cref="BuildingSession"/>
+        /// are dropped from the registry.
+        /// </summary>
+        public static void ReprintAll()
+        {
+            // Snapshot keys so we can remove stale entries during iteration.
+            var buildingIds = PrintBuildingRegistry.All.Keys.ToList();
+            if (buildingIds.Count == 0) return;
+
+            var editor = AcadContext.Editor;
+            int repainted = 0;
+
+            foreach (var id in buildingIds)
+            {
+                var building = BuildingSession.Buildings.FirstOrDefault(b => b.Id == id);
+                var entry = PrintBuildingRegistry.All[id];
+
+                if (building == null)
+                {
+                    // Building gone from the session — clean up any leftover geometry
+                    // and drop the orphan entry.
+                    EraseEntities(entry.DrawnEntityIds);
+                    entry.DrawnEntityIds.Clear();
+                    PrintBuildingRegistry.Remove(id);
+                    continue;
+                }
+
+                Reprint(building, entry);
+                repainted++;
+            }
+
+            if (repainted > 0)
+                editor.WriteMessage($"\n  Reprinted {repainted} building(s).");
+        }
+
+        private static void Reprint(Building building, PrintBuildingRegistry.Entry entry)
+        {
+            // Erase last pass before drawing the new one — otherwise old geometry
+            // lingers underneath updated shapes.
+            EraseEntities(entry.DrawnEntityIds);
+            entry.DrawnEntityIds.Clear();
+
+            if (entry.StoryCenters.Count == 0) return;
+
+            var wallsByStory = building.Walls
+                .GroupBy(w => w.StoryId)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            var sortedStories = building.Stories
+                .OrderBy(s => s.BotLevel.Elevation)
+                .ToList();
+
+            var totals = new Totals();
+
+            foreach (var story in sortedStories)
+            {
+                if (!entry.StoryCenters.TryGetValue(story.Id, out var center)) continue;
+                if (!wallsByStory.TryGetValue(story.Id, out var storyWalls) || storyWalls.Count == 0) continue;
+
+                var (cx, cy) = ComputeBoundingBoxCenter(storyWalls);
+                double dx = center.X - cx;
+                double dy = center.Y - cy;
+
+                DrawStory(storyWalls, dx, dy, totals, entry.DrawnEntityIds);
+            }
         }
 
         // -------------------------------------------------------------------
@@ -80,7 +171,8 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
             public int Doors;
         }
 
-        private void DrawStory(List<Wall> walls, double dx, double dy, Totals totals)
+        private static void DrawStory(
+            List<Wall> walls, double dx, double dy, Totals totals, List<ObjectId> drawnIds)
         {
             var doc = AcadContext.Document;
             var db = doc.Database;
@@ -101,7 +193,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                     // Walls are drawn as the pieces BETWEEN their openings.
                     foreach (var subWall in wall.SubWalls())
                     {
-                        DrawRect(tx, modelSpace, subWall, McpLayers.Walls, dx, dy);
+                        DrawRect(tx, modelSpace, subWall, McpLayers.Walls, dx, dy, drawnIds);
                         totals.SubWalls++;
                     }
 
@@ -111,17 +203,41 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                         var rect = opening.Line.ToRect(wall.Thickness);
                         if (opening is Door)
                         {
-                            DrawRect(tx, modelSpace, rect, McpLayers.Doors, dx, dy);
+                            DrawRect(tx, modelSpace, rect, McpLayers.Doors, dx, dy, drawnIds);
                             totals.Doors++;
                         }
                         else
                         {
-                            DrawRect(tx, modelSpace, rect, McpLayers.Windows, dx, dy);
+                            DrawRect(tx, modelSpace, rect, McpLayers.Windows, dx, dy, drawnIds);
                             totals.Windows++;
                         }
                     }
                 }
 
+                tx.Commit();
+            }
+        }
+
+        /// <summary>
+        /// Erases every still-valid entity in <paramref name="ids"/> from the
+        /// drawing. Missing or already-erased ids are skipped silently.
+        /// </summary>
+        private static void EraseEntities(IReadOnlyList<ObjectId> ids)
+        {
+            if (ids.Count == 0) return;
+
+            var doc = AcadContext.Document;
+            var db = doc.Database;
+
+            using (doc.LockDocument())
+            using (var tx = db.TransactionManager.StartTransaction())
+            {
+                foreach (var id in ids)
+                {
+                    if (!id.IsValid || id.IsErased) continue;
+                    var entity = tx.GetObject(id, OpenMode.ForWrite) as Entity;
+                    entity?.Erase();
+                }
                 tx.Commit();
             }
         }
@@ -182,10 +298,11 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
         /// <summary>
         /// Draws a closed 2D polyline from the first 4 corners of <paramref name="rect"/>,
         /// shifted by (<paramref name="dx"/>, <paramref name="dy"/>). Z is dropped — the
-        /// polyline sits at elevation 0 in pure 2D.
+        /// polyline sits at elevation 0 in pure 2D. Appends the new entity's ObjectId
+        /// to <paramref name="drawnIds"/> so it can be erased on the next reprint.
         /// </summary>
         private static void DrawRect(Transaction tx, BlockTableRecord modelSpace,
-            Rect rect, string layer, double dx, double dy)
+            Rect rect, string layer, double dx, double dy, List<ObjectId> drawnIds)
         {
             var polyline = new AcadPolyline();
             for (int i = 0; i < 4; i++)
@@ -197,8 +314,9 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
             polyline.Closed = true;
             polyline.Layer = layer;
 
-            modelSpace.AppendEntity(polyline);
+            var id = modelSpace.AppendEntity(polyline);
             tx.AddNewlyCreatedDBObject(polyline, true);
+            drawnIds.Add(id);
         }
     }
 }

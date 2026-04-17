@@ -21,7 +21,12 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin
     /// entities, and re-converts to the domain model. Run after any drawing edit.
     ///
     /// <b>On-demand</b> — utilities that query or export the current state
-    /// (print, 3D view, delete, reset).
+    /// (3D view, delete, reset).
+    ///
+    /// <b>On-demand, auto-redone on OL_REFRESH</b> — commands the user invokes
+    /// on demand, but whose last invocation is remembered and replayed
+    /// automatically every time OL_REFRESH runs, so the visualization stays in
+    /// sync with the re-ingested model (print building).
     ///
     /// <b>Debugging</b> — export and visualize the domain model for diagnostics
     /// (JSON export, SVG drawing).
@@ -62,9 +67,6 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin
         // On-demand — query, visualize, export
         // =================================================================
 
-        [CommandMethod("OL_PRINT_BUILDING")]
-        public static void PrintBuilding() => new PrintBuildingWorkflow().Run();
-
         [CommandMethod("OL_DELETE_BUILDING")]
         public static void DeleteBuilding() => new DeleteBuildingWorkflow().Run();
 
@@ -76,6 +78,15 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin
 
         [CommandMethod("OL_CLEAR_3D")]
         public static void Clear3D() => new Clear3DViewWorkflow().Run();
+
+        // =================================================================
+        // On-demand, auto-redone on OL_REFRESH — the user invokes these
+        // directly, but their last invocation is remembered and replayed
+        // by OL_REFRESH so the visualization stays in sync with the model.
+        // =================================================================
+
+        [CommandMethod("OL_PRINT_BUILDING")]
+        public static void PrintBuilding() => new PrintBuildingWorkflow().Run();
 
         // =================================================================
         // Debugging — export and visualize the domain model

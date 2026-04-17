@@ -11,7 +11,13 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
     /// <summary>
     /// Orchestrates the OL_REFRESH command.
     ///
-    /// For every <see cref="FloorPlanWorkingArea"/> in the session:
+    /// <list type="number">
+    /// <item>Drains <see cref="PendingCanvasCleanup"/>: erases the frames,
+    /// labels and printed polylines left behind by buildings that were
+    /// removed via OL_DELETE_BUILDING since the last refresh.</item>
+    /// </list>
+    ///
+    /// Then, for every <see cref="FloorPlanWorkingArea"/> in the session:
     /// <list type="number">
     /// <item>Uses the current boundary frame to find all entities that are
     /// partly or fully inside (crossing selection).</item>
@@ -23,6 +29,9 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
     /// <item>Re-maps domain element IDs to source AutoCAD ObjectIds.</item>
     /// <item>If a 3D view is active (entities on MCP_3D_* layers exist),
     /// runs Clear3D + Show3D to refresh it.</item>
+    /// <item>Replays every OL_PRINT_BUILDING recorded in
+    /// <see cref="PrintBuildingRegistry"/> so printed floor plans stay in sync
+    /// with the re-ingested model.</item>
     /// </list>
     /// </summary>
     public class RefreshWorkflow
@@ -31,6 +40,11 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
 
         public void Run()
         {
+            // --- 0. Drain canvas cleanup from prior OL_DELETE_BUILDING calls ---
+            // Done BEFORE the empty-session early return so a refresh after the
+            // very last building was deleted still wipes its leftover entities.
+            DrainPendingCleanup();
+
             var entries = BuildingSession.Entries;
             if (entries.Count == 0)
             {
@@ -79,7 +93,48 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                 }
             }
 
+            // --- 8. Replay every remembered OL_PRINT_BUILDING ---
+            PrintBuildingWorkflow.ReprintAll();
+
             _editor.WriteMessage($"\n\nRefreshed {areasRefreshed} working area(s).");
+        }
+
+        // -------------------------------------------------------------------
+        // Pending canvas cleanup (staged by OL_DELETE_BUILDING)
+        // -------------------------------------------------------------------
+
+        /// <summary>
+        /// Erases every still-valid entity in <see cref="PendingCanvasCleanup"/>
+        /// and clears the queue. Called at the very start of a refresh so
+        /// frames, labels and printed polylines from deleted buildings disappear
+        /// before anything else happens.
+        /// </summary>
+        private void DrainPendingCleanup()
+        {
+            int pending = PendingCanvasCleanup.Count;
+            if (pending == 0) return;
+
+            var doc = AcadContext.Document;
+            var db = doc.Database;
+
+            int erased = 0;
+            using (doc.LockDocument())
+            using (var tx = db.TransactionManager.StartTransaction())
+            {
+                foreach (var id in PendingCanvasCleanup.Ids)
+                {
+                    if (!id.IsValid || id.IsErased) continue;
+                    var entity = tx.GetObject(id, OpenMode.ForWrite) as Entity;
+                    if (entity == null) continue;
+                    entity.Erase();
+                    erased++;
+                }
+                tx.Commit();
+            }
+
+            PendingCanvasCleanup.Clear();
+            _editor.WriteMessage(
+                $"\nCleaned up {erased} canvas entity(ies) from deleted building(s).");
         }
 
         // -------------------------------------------------------------------

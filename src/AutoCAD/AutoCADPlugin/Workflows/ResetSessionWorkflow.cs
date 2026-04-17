@@ -33,6 +33,8 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
             }
 
             BuildingSession.Clear();
+            PrintBuildingRegistry.Clear();
+            PendingCanvasCleanup.Clear();
             _editor.WriteMessage($"\nSession cleared ({count} building(s) removed).");
         }
     }
