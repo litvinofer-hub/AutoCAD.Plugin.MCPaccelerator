@@ -21,12 +21,17 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin
     /// entities, and re-converts to the domain model. Run after any drawing edit.
     ///
     /// <b>On-demand</b> — utilities that query or export the current state
-    /// (3D view, delete, reset).
+    /// (3D view, reset).
     ///
-    /// <b>On-demand, auto-redone on OL_REFRESH</b> — commands the user invokes
-    /// on demand, but whose last invocation is remembered and replayed
-    /// automatically every time OL_REFRESH runs, so the visualization stays in
-    /// sync with the re-ingested model (print building).
+    /// <b>On-demand, triggers OL_REFRESH</b> — commands the user invokes on
+    /// demand that finish by running OL_REFRESH themselves, so the canvas
+    /// ends up consistent with the session after a single command
+    /// (e.g. delete building).
+    ///
+    /// <b>On-demand, replayed by OL_REFRESH</b> — commands the user invokes
+    /// on demand whose last invocation is remembered and re-run every time
+    /// OL_REFRESH runs, so the visualization stays in sync with the
+    /// re-ingested model (e.g. print building).
     ///
     /// <b>Debugging</b> — export and visualize the domain model for diagnostics
     /// (JSON export, SVG drawing).
@@ -67,9 +72,6 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin
         // On-demand — query, visualize, export
         // =================================================================
 
-        [CommandMethod("OL_DELETE_BUILDING")]
-        public static void DeleteBuilding() => new DeleteBuildingWorkflow().Run();
-
         [CommandMethod("OL_RESET_SESSION")]
         public static void ResetSession() => new ResetSessionWorkflow().Run();
 
@@ -80,9 +82,18 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin
         public static void Clear3D() => new Clear3DViewWorkflow().Run();
 
         // =================================================================
-        // On-demand, auto-redone on OL_REFRESH — the user invokes these
-        // directly, but their last invocation is remembered and replayed
-        // by OL_REFRESH so the visualization stays in sync with the model.
+        // On-demand, triggers OL_REFRESH — each command here runs OL_REFRESH
+        // itself at the end of its flow, so the canvas is consistent with the
+        // session after a single user action.
+        // =================================================================
+
+        [CommandMethod("OL_DELETE_BUILDING")]
+        public static void DeleteBuilding() => new DeleteBuildingWorkflow().Run();
+
+        // =================================================================
+        // On-demand, replayed by OL_REFRESH — the user invokes these directly,
+        // but OL_REFRESH remembers the last invocation and re-runs it every
+        // time, so the visualization stays in sync with the re-ingested model.
         // =================================================================
 
         [CommandMethod("OL_PRINT_BUILDING")]

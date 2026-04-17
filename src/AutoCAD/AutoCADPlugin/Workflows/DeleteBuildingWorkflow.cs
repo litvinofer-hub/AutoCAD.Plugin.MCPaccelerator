@@ -14,10 +14,11 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
     ///
     /// The on-canvas entities that belonged to the building — working-area
     /// frames and labels, axial-system lines and bubbles, and printed floor
-    /// plan polylines — are NOT erased here. Their ObjectIds are staged in
-    /// <see cref="PendingCanvasCleanup"/> and swept by the next OL_REFRESH, so
-    /// the user only pays the canvas-edit cost once, during the refresh they
-    /// were going to run anyway.
+    /// plan polylines — are staged in <see cref="PendingCanvasCleanup"/>,
+    /// then wiped by the <see cref="RefreshWorkflow"/> that runs at the end
+    /// of <see cref="Run"/>. The staging + automatic refresh handshake means
+    /// the canvas is always consistent with the session after the command
+    /// returns, without the user having to hit OL_REFRESH themselves.
     ///
     /// The user's own floor plan entities (their walls/windows/doors) are
     /// NOT queued — those are the source drawing and must survive a
@@ -48,14 +49,18 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
             StageAxialSystemEntities(building);
             StagePrintedEntities(building);
 
-            if (BuildingSession.Remove(building))
+            if (!BuildingSession.Remove(building))
             {
-                PrintBuildingRegistry.Remove(building);
-                _editor.WriteMessage(
-                    $"\nBuilding '{building.Name}' deleted. Run OL_REFRESH to clean up the canvas.");
-            }
-            else
                 _editor.WriteMessage($"\nBuilding '{building.Name}' was not found in the session.");
+                return;
+            }
+
+            PrintBuildingRegistry.Remove(building);
+            _editor.WriteMessage($"\nBuilding '{building.Name}' deleted. Refreshing...");
+
+            // Auto-chain into OL_REFRESH so the staged cleanup runs and the
+            // remaining buildings are re-ingested in one user action.
+            new RefreshWorkflow().Run();
         }
 
         /// <summary>
