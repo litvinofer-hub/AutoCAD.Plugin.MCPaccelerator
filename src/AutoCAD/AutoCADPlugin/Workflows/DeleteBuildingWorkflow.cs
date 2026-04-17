@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using MCPAccelerator.AutoCAD.AutoCADPlugin.Prompts;
 using MCPAccelerator.AutoCAD.AutoCADPlugin.Utils;
@@ -11,10 +13,15 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
     /// (together with its <see cref="PrintBuildingRegistry"/> entry).
     ///
     /// The on-canvas entities that belonged to the building — working-area
-    /// frames and labels, and printed floor plan polylines — are NOT erased
-    /// here. Their ObjectIds are staged in <see cref="PendingCanvasCleanup"/>
-    /// and swept by the next OL_REFRESH, so the user only pays the canvas-edit
-    /// cost once, during the refresh they were going to run anyway.
+    /// frames and labels, axial-system lines and bubbles, and printed floor
+    /// plan polylines — are NOT erased here. Their ObjectIds are staged in
+    /// <see cref="PendingCanvasCleanup"/> and swept by the next OL_REFRESH, so
+    /// the user only pays the canvas-edit cost once, during the refresh they
+    /// were going to run anyway.
+    ///
+    /// The user's own floor plan entities (their walls/windows/doors) are
+    /// NOT queued — those are the source drawing and must survive a
+    /// building deletion.
     /// </summary>
     public class DeleteBuildingWorkflow
     {
@@ -38,6 +45,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
             // Stage every on-canvas entity the building owns before we lose
             // the references to it.
             StageWorkingAreaEntities(building);
+            StageAxialSystemEntities(building);
             StagePrintedEntities(building);
 
             if (BuildingSession.Remove(building))
@@ -52,9 +60,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
 
         /// <summary>
         /// Queues the frame and label ObjectIds of every working area that
-        /// belongs to <paramref name="building"/>. <see cref="FloorPlanWorkingArea.SelectedObjectIds"/>
-        /// is deliberately NOT queued — those are the user's own floor plan
-        /// entities and must survive a building deletion.
+        /// belongs to <paramref name="building"/>.
         /// </summary>
         private static void StageWorkingAreaEntities(Building building)
         {
@@ -65,6 +71,34 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
             {
                 PendingCanvasCleanup.Add(area.FrameId);
                 PendingCanvasCleanup.Add(area.LabelId);
+            }
+        }
+
+        /// <summary>
+        /// Queues every axial-system entity (line, bubble, label) drawn on
+        /// <see cref="McpLayers.Axes"/> inside any of the building's working
+        /// areas. The axial system is a building-level construct, so erasing
+        /// it is part of erasing the building.
+        /// </summary>
+        private static void StageAxialSystemEntities(Building building)
+        {
+            var workingAreas = BuildingSession.GetWorkingAreas(building);
+            if (workingAreas == null) return;
+
+            var db = AcadContext.Document.Database;
+            using (var tx = db.TransactionManager.StartTransaction())
+            {
+                foreach (var area in workingAreas.Areas)
+                {
+                    foreach (var id in area.SelectedObjectIds)
+                    {
+                        if (!id.IsValid || id.IsErased) continue;
+                        var entity = tx.GetObject(id, OpenMode.ForRead) as Entity;
+                        if (entity != null && entity.Layer == McpLayers.Axes)
+                            PendingCanvasCleanup.Add(id);
+                    }
+                }
+                tx.Commit();
             }
         }
 
