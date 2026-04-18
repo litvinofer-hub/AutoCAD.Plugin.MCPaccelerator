@@ -158,8 +158,8 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
             // they're visible regardless of the building's unit system.
             double scale = ComputeDisplayScale(graph);
             double circleRadius = scale * 0.01;
-            double textHeight   = scale * 0.02;
-            double textOffset   = circleRadius * 2.0;
+            double textHeight   = scale * 0.01;
+            double textOffset   = circleRadius;
 
             using (doc.LockDocument())
             using (var tx = db.TransactionManager.StartTransaction())
