@@ -29,6 +29,11 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Utils
         // ---------- Working-area frame ----------
         public const string FloorFrame = "MCP_Floor_Frame";
 
+        // ---------- Level plan graphs (PrintGraphsWorkflow) ----------
+        public const string GraphEdges  = "MCP_Graph_Edges";
+        public const string GraphNodes  = "MCP_Graph_Nodes";
+        public const string GraphLabels = "MCP_Graph_Labels";
+
         // ---------- AutoCAD Color Index (ACI) values used by the layers above ----------
         public const short WhiteColorIndex  = 7;
         public const short RedColorIndex    = 1;

@@ -25,7 +25,7 @@ namespace MCPAccelerator.Domain.BuildingModel
     /// </summary>
     public class Wall : IHavePoints
     {
-        public WallType Type { get; set; } = WallType.UNKNOWN;
+        public WallType Type { get; set; } = WallType.LB;
 
         public Guid Id { get; private set; }
         public Guid BuildingId { get; private set; }

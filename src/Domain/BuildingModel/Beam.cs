@@ -46,7 +46,7 @@ namespace MCPAccelerator.Domain.BuildingModel
         /// </summary>
         public SubLevel BotSubLevel { get; private set; }
 
-        public BeamType Type { get; set; } = BeamType.UNKNOWN;
+        public BeamType Type { get; set; } = BeamType.BM;
 
         /// <summary>Beam height (always positive). Derived from BotSubLevel.Offset.</summary>
         public double Height => -BotSubLevel.Offset;

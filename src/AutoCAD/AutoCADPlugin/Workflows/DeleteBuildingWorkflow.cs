@@ -48,6 +48,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
             StageWorkingAreaEntities(building);
             StageAxialSystemEntities(building);
             StagePrintedEntities(building);
+            StagePrintedGraphEntities(building);
 
             if (!BuildingSession.Remove(building))
             {
@@ -56,6 +57,7 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
             }
 
             PrintBuildingRegistry.Remove(building);
+            PrintGraphsRegistry.Remove(building);
             _editor.WriteMessage($"\nBuilding '{building.Name}' deleted. Refreshing...");
 
             // Auto-chain into OL_REFRESH so the staged cleanup runs and the
@@ -110,6 +112,14 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
         private static void StagePrintedEntities(Building building)
         {
             var entry = PrintBuildingRegistry.TryGet(building);
+            if (entry == null) return;
+
+            PendingCanvasCleanup.AddRange(entry.DrawnEntityIds);
+        }
+
+        private static void StagePrintedGraphEntities(Building building)
+        {
+            var entry = PrintGraphsRegistry.TryGet(building);
             if (entry == null) return;
 
             PendingCanvasCleanup.AddRange(entry.DrawnEntityIds);

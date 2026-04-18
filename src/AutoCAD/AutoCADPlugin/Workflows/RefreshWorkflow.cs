@@ -93,8 +93,9 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin.Workflows
                 }
             }
 
-            // --- 8. Replay every remembered OL_PRINT_BUILDING ---
+            // --- 8. Replay every remembered OL_PRINT_BUILDING / OL_PRINT_GRAPHS ---
             PrintBuildingWorkflow.ReprintAll();
+            PrintGraphsWorkflow.ReprintAll();
 
             _editor.WriteMessage($"\n\nRefreshed {areasRefreshed} working area(s).");
         }

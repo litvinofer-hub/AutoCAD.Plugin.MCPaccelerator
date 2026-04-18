@@ -99,6 +99,9 @@ namespace MCPAccelerator.AutoCAD.AutoCADPlugin
         [CommandMethod("OL_PRINT_BUILDING")]
         public static void PrintBuilding() => new PrintBuildingWorkflow().Run();
 
+        [CommandMethod("OL_PRINT_GRAPHS")]
+        public static void PrintGraphs() => new PrintGraphsWorkflow().Run();
+
         // =================================================================
         // Debugging — export and visualize the domain model
         // =================================================================
