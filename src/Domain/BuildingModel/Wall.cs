@@ -5,8 +5,28 @@ using MCPAccelerator.Utils.GeometryModel;
 
 namespace MCPAccelerator.Domain.BuildingModel
 {
+    public enum WallType
+    {
+        UNKNOWN,
+        LB, // load bearing
+        NB  // non-bearing
+    }
+
+    /// <summary>
+    /// Represents a wall element. A wall is modeled as a <b>box</b>: vertical
+    /// sides, constant <see cref="Thickness"/> along its full height. Its
+    /// footprint at any elevation between <see cref="BotLevel"/> and
+    /// <see cref="TopLevel"/> is the same as <see cref="BotLine"/> projected
+    /// to that elevation — in particular, the wall's top middle-line is
+    /// BotLine shifted up to TopLevel.Elevation. This assumption is what
+    /// lets the <see cref="LevelPlanGraph"/> at the wall's top level
+    /// represent the wall as a single edge whose endpoints share the wall's
+    /// XY with Z = TopLevel.Elevation.
+    /// </summary>
     public class Wall : IHavePoints
     {
+        public WallType Type { get; set; } = WallType.UNKNOWN;
+
         public Guid Id { get; private set; }
         public Guid BuildingId { get; private set; }
 

@@ -22,11 +22,13 @@ namespace MCPAccelerator.Domain.BuildingModel
         private readonly List<Story> _stories = [];
         private readonly List<Room> _rooms = [];
         private readonly List<Wall> _walls = [];
+        private readonly List<Beam> _beams = [];
 
         public IReadOnlyList<Level> Levels => _levels.AsReadOnly();
         public IReadOnlyList<Story> Stories => _stories.AsReadOnly();
         public IReadOnlyList<Room> Rooms => _rooms.AsReadOnly();
         public IReadOnlyList<Wall> Walls => _walls.AsReadOnly();
+        public IReadOnlyList<Beam> Beams => _beams.AsReadOnly();
 
         /// <summary>
         /// The building-wide axial system (shared across all stories). All its
@@ -136,7 +138,96 @@ namespace MCPAccelerator.Domain.BuildingModel
             var botLine = new LineSegment(start, end);
             var wall = new Wall(this.Id, botLine, thickness, top, Levels, story.Id);
             _walls.Add(wall);
+
+            AddWallTopEdgeToGraph(x1, y1, x2, y2, top, wall);
             return wall;
+        }
+
+        /// <summary>
+        /// Adds the wall's top middle-line as an edge in the top level's plan
+        /// graph. Points go through <see cref="GetOrAddPoint"/> so the graph's
+        /// nodes share coordinates with any wall/beam/edge at the same XY/Z.
+        /// No-op for non-orthogonal or zero-length walls (the plan graph is
+        /// orthogonal-only).
+        /// </summary>
+        private void AddWallTopEdgeToGraph(double x1, double y1, double x2, double y2,
+            Level top, Wall wall)
+        {
+            bool sameX = GeometrySettings.AreEqual(x1, x2);
+            bool sameY = GeometrySettings.AreEqual(y1, y2);
+            bool isOrthogonalNonZero = sameX ^ sameY;
+            if (!isOrthogonalNonZero) return;
+
+            Point topStart = GetOrAddPoint(x1, y1, top.Elevation);
+            Point topEnd   = GetOrAddPoint(x2, y2, top.Elevation);
+            var edge = top.Graph.AddEdge(topStart, topEnd);
+            edge.ElementId = wall.Id;
+        }
+
+        /// <summary>
+        /// Creates a beam whose <b>top</b> line is at <paramref name="topElevation"/>.
+        /// The beam hangs <paramref name="height"/> below. Looks up the story
+        /// whose elevation range contains the beam's bottom (topElevation − height).
+        /// </summary>
+        public Beam AddBeam(double x1, double y1, double x2, double y2,
+            double topElevation, double thickness, double height)
+        {
+            Level top = GetOrAddLevel(topElevation);
+
+            double botElevation = top.Elevation - height;
+            Story story = FindStoryFor(botElevation)
+                ?? throw new ArgumentException(
+                    $"Cannot create beam at bottom elevation {botElevation}: no story contains this elevation. Add a story first.");
+
+            return CreateBeam(x1, y1, x2, y2, top, thickness, height, story);
+        }
+
+        /// <summary>
+        /// Creates a beam on the given <paramref name="story"/>. The beam's top
+        /// line is placed at the story's TopLevel.Elevation and the beam hangs
+        /// <paramref name="height"/> below.
+        /// </summary>
+        public Beam AddBeam(double x1, double y1, double x2, double y2,
+            Story story, double thickness, double height)
+        {
+            if (story == null) throw new ArgumentNullException(nameof(story));
+            if (!_stories.Contains(story))
+                throw new ArgumentException("Story does not belong to this building.", nameof(story));
+
+            return CreateBeam(x1, y1, x2, y2, story.TopLevel, thickness, height, story);
+        }
+
+        private Beam CreateBeam(double x1, double y1, double x2, double y2,
+            Level top, double thickness, double height, Story story)
+        {
+            Point start = GetOrAddPoint(x1, y1, top.Elevation);
+            Point end   = GetOrAddPoint(x2, y2, top.Elevation);
+
+            var topLine = new LineSegment(start, end);
+            var beam = new Beam(this.Id, topLine, thickness, height, Levels, story.Id);
+            _beams.Add(beam);
+
+            AddBeamTopEdgeToGraph(x1, y1, x2, y2, top, beam);
+            return beam;
+        }
+
+        /// <summary>
+        /// Adds the beam's top line as an edge in the top level's plan graph.
+        /// Beam endpoints are already shared via <see cref="GetOrAddPoint"/>.
+        /// No-op for non-orthogonal or zero-length beams.
+        /// </summary>
+        private void AddBeamTopEdgeToGraph(double x1, double y1, double x2, double y2,
+            Level top, Beam beam)
+        {
+            bool sameX = GeometrySettings.AreEqual(x1, x2);
+            bool sameY = GeometrySettings.AreEqual(y1, y2);
+            bool isOrthogonalNonZero = sameX ^ sameY;
+            if (!isOrthogonalNonZero) return;
+
+            Point topStart = GetOrAddPoint(x1, y1, top.Elevation);
+            Point topEnd   = GetOrAddPoint(x2, y2, top.Elevation);
+            var edge = top.Graph.AddEdge(topStart, topEnd);
+            edge.ElementId = beam.Id;
         }
 
         /// <summary>
@@ -225,6 +316,13 @@ namespace MCPAccelerator.Domain.BuildingModel
             return removed;
         }
 
+        public bool RemoveBeam(Beam beam)
+        {
+            bool removed = _beams.Remove(beam);
+            if (removed) Cleanup();
+            return removed;
+        }
+
         public bool RemoveStory(Story story)
         {
             bool removed = _stories.Remove(story);
@@ -260,6 +358,10 @@ namespace MCPAccelerator.Domain.BuildingModel
                 usedLevels.Add(wall.BotLevel);
                 usedLevels.Add(wall.TopLevel);
             }
+            foreach (var beam in _beams)
+            {
+                usedLevels.Add(beam.TopLevel);
+            }
             foreach (var story in _stories)
             {
                 usedLevels.Add(story.BotLevel);
@@ -284,6 +386,12 @@ namespace MCPAccelerator.Domain.BuildingModel
             foreach (var wall in _walls)
             {
                 foreach (var point in wall.GetPoints())
+                    yield return point;
+            }
+
+            foreach (var beam in _beams)
+            {
+                foreach (var point in beam.GetPoints())
                     yield return point;
             }
         }

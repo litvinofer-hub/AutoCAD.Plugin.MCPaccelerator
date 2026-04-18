@@ -18,6 +18,13 @@ namespace MCPAccelerator.Domain.BuildingModel
         public IReadOnlyList<SubLevel> SubLevels => _subLevels.AsReadOnly();
 
         /// <summary>
+        /// Orthogonal plan graph for this level. Its edges represent the top
+        /// middle-line of walls/beams whose TopLevel equals this level — i.e.
+        /// the graph describes what stands below this level.
+        /// </summary>
+        public LevelPlanGraph Graph { get; } = new LevelPlanGraph();
+
+        /// <summary>
         /// Returns the existing SubLevel with matching offset, or creates and adds a new one.
         /// </summary>
         public SubLevel GetOrAddSubLevel(double offset)
